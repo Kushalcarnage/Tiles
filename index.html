@@ -234,6 +234,20 @@ table.q tr.tot td{font-weight:700;background:var(--surface-2)}
 .empty-surf .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .empty-surf .btn{min-height:56px;font-size:15.5px}
 .showtools{position:absolute;bottom:calc(12px + env(safe-area-inset-bottom,0px));right:calc(12px + env(safe-area-inset-right,0px))}
+/* Options (A/B/C variants of the same photo) */
+.var-bar{position:absolute;top:10px;left:calc(10px + env(safe-area-inset-left,0px));display:flex;gap:6px;align-items:center;flex-wrap:wrap;max-width:58%}
+.var-bar .sbtn{min-width:34px;padding:0 10px;justify-content:center;font-family:var(--f-display);font-size:14px}
+.var-bar .sbtn.cur{background:#f3f6f9;color:#11151a;border-color:#f3f6f9}
+.var-bar .sbtn.add{opacity:.9;font-family:var(--f-body);font-size:12.5px}
+.room-chips .chip{min-height:32px;font-size:13px;padding:0 11px}
+.badge.ok{background:color-mix(in srgb,var(--ok) 14%,var(--surface));color:var(--ok);border-color:transparent}
+.badge.warn{background:color-mix(in srgb,var(--warn) 16%,var(--surface));color:var(--warn);border-color:transparent}
+.warn-box{display:flex;gap:8px;align-items:flex-start;padding:9px 11px;border-radius:9px;background:color-mix(in srgb,var(--warn) 12%,var(--surface));color:var(--warn);font-size:13.5px;line-height:1.35;font-weight:500}
+.warn-box svg{width:18px;height:18px;flex:none;margin-top:1px}
+table.q tr.opt{cursor:pointer}
+table.q tr.opt:hover td{background:var(--surface-2)}
+table.q tr.opt.cur td{background:var(--accent-soft)}
+table.q td.wrap{white-space:normal;text-align:left;min-width:120px;font-size:12.5px;color:var(--muted)}
 
 @media (min-width:900px){
   .ed-main{flex-direction:row}
@@ -266,7 +280,16 @@ table.q tr.tot td{font-weight:700;background:var(--surface-2)}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 
 /* Live camera overlay (shown over the AR camera; deliberately dark glass in both themes) */
-#ar{position:fixed;inset:0;z-index:100;background:transparent;color:#fff;font-family:var(--f-body);-webkit-user-select:none;user-select:none}
+#ar{position:fixed;inset:0;z-index:100;background:transparent;color:#fff;font-family:var(--f-body);-webkit-user-select:none;user-select:none;touch-action:none}
+.ar-strip,.ar-row.ar-scroll{touch-action:pan-x}
+.ar-top,.ar-bottom{pointer-events:none}
+.ar-top>*,.ar-bottom>*{pointer-events:auto}
+.ar-bottom>.ar-note{pointer-events:none}
+#arHandles{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.ar-h{position:absolute;left:0;top:0;width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.9);border:3px solid #3d63e0;box-shadow:0 2px 8px rgba(0,0,0,.45);will-change:transform}
+.ar-h::after{content:"";position:absolute;inset:9px;border-radius:50%;background:#3d63e0}
+.ar-h.on{width:40px;height:40px;background:rgba(255,255,255,.6)}
+.ar-pin{position:absolute;left:0;top:0;width:2px;height:72px;margin-left:-1px;background:linear-gradient(#fff,rgba(255,255,255,.2));pointer-events:none;box-shadow:0 0 0 1px rgba(0,0,0,.35)}
 .ar-top{position:absolute;top:0;left:0;right:0;display:flex;align-items:flex-start;gap:8px;padding-top:calc(10px + env(safe-area-inset-top,0px));padding-left:max(10px, env(safe-area-inset-left,0px));padding-right:max(10px, env(safe-area-inset-right,0px));padding-bottom:10px;background:linear-gradient(rgba(0,0,0,.55),rgba(0,0,0,0))}
 .ar-ib{width:44px;height:44px;flex:none;border-radius:50%;border:0;background:rgba(15,18,24,.72);color:#fff;font-size:18px;display:flex;align-items:center;justify-content:center;cursor:pointer}
 .ar-ib svg{width:20px;height:20px}
@@ -383,7 +406,9 @@ body.ar-on #app > section{visibility:hidden}
       <div class="stage" id="stage">
         <canvas id="view"></canvas>
         <div class="stage-hint" id="hint" hidden><span></span></div>
+        <div class="var-bar" id="varBar"></div>
         <div class="stage-tools">
+          <button class="sbtn" id="btnLight" title="Room lighting: daylight, warm bulb or cool white"></button>
           <button class="sbtn" id="btnFit" title="Fit photo">Fit</button>
           <button class="sbtn" id="btnFull" title="Hide tools and guides">Full view</button>
         </div>
@@ -406,6 +431,8 @@ body.ar-on #app > section{visibility:hidden}
     </div>
     <div class="ar-cross" aria-hidden="true"></div>
     <div id="arLabels" aria-hidden="true"></div>
+    <div id="arHandles" aria-hidden="true"></div>
+    <div class="ar-pin" id="arPin" hidden aria-hidden="true"></div>
     <div class="ar-sheet" id="arSheet" data-ui hidden></div>
     <div class="ar-bottom" id="arBottom" data-ui></div>
     <div class="ar-toast" id="arToast" hidden></div>
@@ -519,7 +546,36 @@ const ICON = {
   download: I('<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>'),
   copy: I('<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 012-2h8"/>'),
   paint: I('<path d="M18 3l3 3-9 9-4 1 1-4z"/><path d="M4 20c2 0 3-1 3-3"/>'),
+  sun: I('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'),
+  warn: I('<path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18.5v.5"/>'),
 };
+
+/* ===== Room lighting (applied to the finished picture, so customers see the tile as it will look under their own light) ===== */
+const LIGHTS = [
+  { key: 'day',  label: 'Daylight',   short: 'Daylight', mul: null, add: null },
+  { key: 'warm', label: 'Warm light', short: 'Warm',     mul: '#ffe8cf', add: 'rgba(255,175,90,.07)' },
+  { key: 'cool', label: 'Cool white', short: 'Cool',     mul: '#e3ecff', add: 'rgba(175,205,255,.06)' },
+];
+function lightDef(k) { return LIGHTS.find(l => l.key === k) || LIGHTS[0]; }
+function applyLight(x, w, h, key) {
+  const L = lightDef(key); if (!L.mul) return;
+  x.save(); x.globalCompositeOperation = 'multiply'; x.fillStyle = L.mul; x.fillRect(0, 0, w, h);
+  x.globalCompositeOperation = 'lighter'; x.fillStyle = L.add; x.fillRect(0, 0, w, h); x.restore();
+}
+
+/* ===== Rooms (suitability tags on tiles; the photo's room drives the filter and wet-floor warnings) ===== */
+const ROOMS = [['living', 'Living / dining'], ['bedroom', 'Bedroom'], ['kitchen', 'Kitchen'], ['bathroom', 'Bathroom'], ['balcony', 'Balcony / utility'], ['parking', 'Parking / outdoor'], ['shop', 'Shop / office']];
+const WET = ['bathroom', 'balcony', 'parking'];
+const roomLabel = k => { const r = ROOMS.find(q => q[0] === k); return r ? r[1] : ''; };
+/* Why a floor tile may be a poor fit for the room in the photo ('' = fine) */
+function skidWarn(sf, def, room) {
+  if (!sf || !def || sf.type !== 'floor' || !WET.includes(room)) return '';
+  if (def.antiSkid) return '';
+  const where = roomLabel(room).toLowerCase();
+  if (def.finish === 'glossy' || def.finish === 'satin') return `Glossy floor tile in a ${where}: slippery when wet. Prefer an anti-skid tile.`;
+  if (!def.sample) return `Check that this tile is anti-skid before using it on a ${where} floor.`;
+  return '';
+}
 
 /* ===== Procedural noise & sample tile designs ===== */
 function makeNoise(seed) {
@@ -728,7 +784,12 @@ const SAMPLES = [
   { id: 's-chequer', name: 'Parking Chequer Charcoal', code: 'Sample', wmm: 400, hmm: 400, use: 'floor', finish: 'parking', perBox: 6, faces: 1,
     gen: { type: 'emboss', pattern: 'chequer', base: [84, 87, 90], seed: 14 } },
 ];
-SAMPLES.forEach(s => { s.sample = true; s.price = null; });
+const SAMPLE_ROOMS = {
+  's-statuario': ['living', 'bedroom', 'kitchen', 'shop'], 's-marquina': ['living', 'shop'], 's-crema': ['living', 'bedroom'], 's-teak': ['living', 'bedroom', 'balcony'],
+  's-carrara': ['bathroom', 'kitchen'], 's-ivory': ['bathroom', 'kitchen'], 's-ocean': ['bathroom'], 's-motif': ['kitchen', 'bathroom'], 's-slate': ['living', 'balcony', 'shop'],
+  's-brick': ['living', 'balcony', 'shop'], 's-kota': ['bathroom', 'balcony', 'kitchen'], 's-cobble': ['parking'], 's-diamond': ['parking'], 's-chequer': ['parking'],
+};
+SAMPLES.forEach(s => { s.sample = true; s.price = null; s.rooms = SAMPLE_ROOMS[s.id] || []; s.antiSkid = s.finish === 'rough' || s.finish === 'parking'; });
 
 /* ===== Geometry ===== */
 // Square (u,v in 0..1) -> quad [TL,TR,BR,BL]. Row-major 3x3.
@@ -1358,7 +1419,9 @@ Store.listTiles = async function () {
 Store.saveTile = async function (tile, texBlob) {
   const id = tile.id || uid('t');
   const rec = { name: tile.name, code: tile.code || '', wmm: +tile.wmm, hmm: +tile.hmm, use: tile.use, finish: tile.finish,
-    perBox: tile.perBox ? +tile.perBox : null, price: tile.price ? +tile.price : null, createdAt: tile.createdAt || Date.now(), updatedAt: Date.now() };
+    perBox: tile.perBox ? +tile.perBox : null, price: tile.price ? +tile.price : null,
+    rooms: Array.isArray(tile.rooms) ? tile.rooms.slice() : [], antiSkid: !!tile.antiSkid, brand: tile.brand || '', thick: tile.thick ? +tile.thick : null,
+    createdAt: tile.createdAt || Date.now(), updatedAt: Date.now() };
   if (Store.mode === 'cloud') {
     let tex = tile.tex || null; const old = tex;
     if (texBlob) tex = await upload(texBlob);
@@ -1405,8 +1468,10 @@ Store.saveProject = async function (proj, photo, thumbBlob, asNew) {
   const id = asNew || !proj.id ? uid('p') : proj.id;
   const now = Date.now();
   const rec = { name: proj.name || 'Untitled design', customer: proj.customer || '', notes: proj.notes || '', extra: +proj.extra || 0,
-    surfaces: cleanJSON(proj.surfaces), w: photo.width, h: photo.height, createdAt: (!asNew && proj.createdAt) || now, updatedAt: now,
-    summary: proj._summary || '' };
+    surfaces: cleanJSON(proj.surfaces), keep: cleanJSON(proj.keep || []), w: photo.width, h: photo.height, createdAt: (!asNew && proj.createdAt) || now, updatedAt: now,
+    summary: proj._summary || '',
+    variants: proj.variants && proj.variants.length ? cleanJSON(proj.variants) : null, vi: proj.vi || 0,
+    lightMode: proj.lightMode || 'day', room: proj.room || '' };
   if (Store.mode === 'cloud') {
     let photoId = asNew ? null : proj.photo;
     if (!photoId) photoId = await upload(await canvasToBlob(photo, 'image/jpeg', 0.9));
@@ -1440,9 +1505,13 @@ window.Ed = Ed;
 
 Ed.surf = () => (Ed.proj ? Ed.proj.surfaces.find(s => s.id === Ed.sel) || null : null);
 Ed.defaultTile = function (type) {
-  const own = Cat.own.find(t => t.use === type || t.use === 'both');
+  const room = Ed.proj && Ed.proj.room; const fits = t => t.use === type || t.use === 'both';
+  const forRoom = t => !room || !(t.rooms && t.rooms.length) || t.rooms.includes(room);
+  const safe = t => !(type === 'floor' && WET.includes(room) && !t.antiSkid && (t.finish === 'glossy' || t.finish === 'satin'));
+  const own = Cat.own.find(t => fits(t) && forRoom(t) && safe(t)) || Cat.own.find(fits);
   if (own) return own.id;
-  return type === 'floor' ? 's-statuario' : 's-carrara';
+  if (type === 'floor') return WET.includes(room) ? 's-kota' : 's-statuario';
+  return 's-carrara';
 };
 Ed.newSurface = function (type) {
   const w = Ed.photo.width, h = Ed.photo.height;
@@ -1463,14 +1532,87 @@ Ed.open = function (proj, photo) {
   if (Ed.proj) for (const s of Ed.proj.surfaces) GL.releaseSurface(s);
   Ed.proj = proj; Ed.photo = photo; Ed.small = photoSmall(photo);
   proj.surfaces = proj.surfaces || []; proj.extra = proj.extra ?? Settings.extra; proj.keep = proj.keep || [];
+  proj.lightMode = proj.lightMode || 'day'; proj.room = proj.room || '';
   for (const s of proj.surfaces) Ed.prepSurface(s);
+  Ed.ensureVariants(); Panels.tf.room = 'auto';
   Ed.sel = proj.surfaces[0] ? proj.surfaces[0].id : null; Ed.cutSel = null;
   Ed.mode = 'view'; Ed.compare = false; Ed.full = false; Ed.undoStack = []; Ed.dirty = false; Ed.slot = 0;
   Ed.tab = proj.surfaces.length ? (Ed.tab === 'surfaces' ? 'tiles' : Ed.tab) : 'surfaces';
   if (!proj.surfaces.length) Ed.tab = 'surfaces';
   $('#projName').value = proj.name || 'Untitled design';
   Screens.show('editor');
-  Ed.v.user = false; Ed.resize(); Ed.applyChrome(); Panels.render(); Ed.requestRender();
+  Ed.v.user = false; Ed.resize(); Ed.applyChrome(); Ed.renderVarBar(); Panels.render(); Ed.requestRender();
+};
+
+/* ---------- options: A / B / C tile choices on the same photo ---------- */
+const VLET = 'ABCD';
+Ed.ensureVariants = function () {
+  const P = Ed.proj; if (!P) return;
+  if (!Array.isArray(P.variants) || !P.variants.length) { P.variants = [{ id: uid('v'), name: 'Option A' }]; P.vi = 0; }
+  if (P.vi == null || P.vi < 0 || P.vi >= P.variants.length) P.vi = 0;
+};
+// copy what is on screen into the active option's slot
+Ed.syncVariant = function () {
+  const P = Ed.proj; if (!P) return; Ed.ensureVariants();
+  const v = P.variants[P.vi]; v.surfaces = cleanJSON(P.surfaces); v.keep = cleanJSON(P.keep || []);
+};
+Ed.loadVariant = function (j) {
+  const P = Ed.proj; const v = P.variants[j]; if (!v) return;
+  for (const s of P.surfaces) GL.releaseSurface(s);
+  P.vi = j; P.surfaces = cleanJSON(v.surfaces || []); P.keep = cleanJSON(v.keep || []);
+  for (const s of P.surfaces) Ed.prepSurface(s);
+  if (!Ed.surf()) Ed.sel = P.surfaces[0] ? P.surfaces[0].id : null;
+  Ed.cutSel = null; Ed.undoStack = [];
+  if (Ed.compare) { Ed.compare = false; $('#btnCompare').setAttribute('aria-pressed', 'false'); }
+  if (Ed.mode !== 'view') Ed.setMode('view');
+  Ed.dirty = true; Panels.render(); Ed.renderVarBar(); Ed.requestRender();
+};
+Ed.switchVariant = function (i) {
+  const P = Ed.proj; if (!P || i === P.vi || !P.variants[i]) return;
+  Ed.syncVariant(); Ed.loadVariant(i); toast(P.variants[i].name, 900);
+};
+Ed.addVariant = function () {
+  const P = Ed.proj; Ed.ensureVariants();
+  if (P.variants.length >= 4) { toast('Up to 4 options per photo'); return; }
+  Ed.syncVariant(); const src = P.variants[P.vi];
+  const v = { id: uid('v'), name: 'Option ' + VLET[P.variants.length], surfaces: cleanJSON(src.surfaces || []), keep: cleanJSON(src.keep || []) };
+  P.variants.push(v); Ed.loadVariant(P.variants.length - 1);
+  if (P.surfaces.length) { Ed.tab = 'tiles'; Panels.render(); }
+  toast(`Copied as ${v.name}. Now change the tiles here and tap A to compare.`, 2600);
+};
+Ed.renameDefaults = function () { Ed.proj.variants.forEach((v, i) => { if (/^Option [A-D]$/.test(v.name)) v.name = 'Option ' + VLET[i]; }); };
+Ed.renderVarBar = function () {
+  const b = $('#varBar'); if (!b || !Ed.proj) return; Ed.ensureVariants();
+  const P = Ed.proj, n = P.variants.length;
+  b.innerHTML = P.variants.map((v, i) => `<button class="sbtn ${i === P.vi ? 'cur' : ''}" data-vi="${i}" title="${esc(v.name)}" aria-label="${esc(v.name)}" aria-pressed="${i === P.vi}">${VLET[i]}</button>`).join('')
+    + (n < 4 ? `<button class="sbtn add" data-vadd="1" title="Try other tiles on this same photo">+ Option</button>` : '');
+};
+Ed.variantMenu = function () {
+  const P = Ed.proj, v = P.variants[P.vi];
+  openModal(`<h3>${esc(v.name)}</h3>
+    <label class="field"><span>Name</span><input id="vnName" value="${esc(v.name)}" placeholder="e.g. Glossy marble, Budget matt"></label>
+    <p class="help">Options share the same photo and measurements. Tap A, B, C on the photo to switch between them. The Quantity tab shows the cost of each option side by side.</p>
+    <div class="acts">${P.variants.length > 1 ? '<button class="btn danger" data-x="del">Remove</button><span class="spacer"></span>' : ''}
+      ${P.variants.length > 1 ? `<button class="btn" data-x="cmp">${ICON.download} Compare image</button>` : ''}
+      <button class="btn" data-x="close">Cancel</button><button class="btn primary" data-x="save">Save name</button></div>`, (s, close) => {
+    s.addEventListener('click', async e => {
+      const b = e.target.closest('[data-x]'); if (!b) return; const x = b.dataset.x;
+      if (x === 'close') return close();
+      if (x === 'save') { v.name = $('#vnName').value.trim() || v.name; Ed.dirty = true; close(); Ed.renderVarBar(); Panels.soft(); return; }
+      if (x === 'cmp') { close(); Exporter.openCompare(); return; }
+      if (x === 'del') {
+        const ok = await confirmBox({ title: `Remove ${v.name}?`, text: 'Its tiles on this photo are removed. The other options stay.', ok: 'Remove', danger: true });
+        if (!ok) return; close();
+        const i = P.vi; P.variants.splice(i, 1); Ed.renameDefaults(); Ed.loadVariant(Math.max(0, i - 1));
+      }
+    });
+  });
+};
+Ed.cycleLight = function () {
+  if (!Ed.proj) return;
+  const i = LIGHTS.findIndex(l => l.key === (Ed.proj.lightMode || 'day'));
+  Ed.proj.lightMode = LIGHTS[(i + 1) % LIGHTS.length].key; Ed.dirty = true;
+  Ed.applyChrome(); Ed.requestDraw(); toast('Shown in ' + lightDef(Ed.proj.lightMode).label.toLowerCase(), 1100);
 };
 
 /* ---------- render scheduling ---------- */
@@ -1540,6 +1682,7 @@ Ed.draw = function () {
   } else if (Ed.mode === 'corners' || Ed.mode === 'cut') {
     x.drawImage(Ed.photo, 0, 0); x.globalAlpha = 0.55; x.drawImage(comp, 0, 0); x.globalAlpha = 1;
   } else x.drawImage(comp, 0, 0);
+  applyLight(x, W, H, Ed.proj.lightMode);
   if (Ed.mode === 'keep' && !Ed.compare && Ed.proj.keep.length) { x.globalAlpha = 0.42; x.drawImage(Ed.keepLayer(), 0, 0); x.globalAlpha = 1; }
   x.setTransform(d, 0, 0, d, 0, 0);
   if (Ed.compare) Ed.drawCompare(x);
@@ -1767,13 +1910,16 @@ Ed.applyChrome = function () {
   else if (Ed.mode === 'keep') t = Ed.keepErase ? 'Rub out the parts that should be tiled again.' : 'Paint over the bed, TV, plants or people in front. They stay on top of the tiles. Two fingers to zoom.';
   else if (Ed.mode === 'paint') t = 'Tap a tile to paint its ' + ({ tile: 'piece', row: 'row', col: 'column' }[Ed.paintTarget]) + (Ed.paintSlot < 0 ? ' back to the pattern.' : ' with design ' + 'ABCD'[Ed.paintSlot] + '.');
   h.hidden = !t || Ed.full; $('span', h).textContent = t;
+  const lb = $('#btnLight'); if (lb) { const L = lightDef(Ed.proj.lightMode); lb.innerHTML = ICON.sun + ' ' + L.short; lb.setAttribute('aria-pressed', String(L.key !== 'day')); }
   $('#panel').hidden = Ed.full; $('#btnShowTools').hidden = !Ed.full;
   $('#btnFull').hidden = Ed.full;
   $('#btnUndo').disabled = !Ed.undoStack.length;
 };
 
 /* ===== Editor side panel ===== */
-const Panels = { tf: { use: 'fit', finish: 'any' } };
+const Panels = { tf: { use: 'fit', finish: 'any', room: 'auto' } };
+// the room the tile list is filtered by: follows the photo's room until the user picks another chip
+Panels.room = () => (Panels.tf.room === 'auto' ? (Ed.proj && Ed.proj.room) || 'any' : Panels.tf.room);
 window.Panels = Panels;
 const TABS = [
   { id: 'surfaces', label: 'Surfaces', icon: ICON.surf },
@@ -1819,6 +1965,9 @@ function tabSurfaces() {
   for (const s of P.surfaces) h += `<button class="chip" data-act="selSurf" data-id="${s.id}" aria-pressed="${s.id === Ed.sel}">${esc(s.name)} <span class="k">${s.type === 'floor' ? 'floor' : 'wall'}</span></button>`;
   if (P.surfaces.length) h += `<button class="chip" data-act="addSurf" data-type="wall">${ICON.plus.replace('<svg', '<svg width="14" height="14"')} Wall</button><button class="chip" data-act="addSurf" data-type="floor">${ICON.plus.replace('<svg', '<svg width="14" height="14"')} Floor</button>`;
   h += `</div></div>`;
+  h += `<div class="sec"><div class="sec-h"><h4>Room in this photo</h4>${P.room ? '' : '<span class="note">optional</span>'}</div>
+    <div class="chips room-chips">${ROOMS.map(([k, l]) => `<button class="chip" data-act="room" data-v="${k}" aria-pressed="${P.room === k}">${l}</button>`).join('')}</div>
+    <p class="help">Shows the tiles suited to this room first and warns when a glossy tile is picked for a wet floor.</p></div>`;
   if (!sf) return h + noSurf();
   const kind = sf.type === 'floor' ? 'floor' : 'wall';
   if (sf.live) {
@@ -1879,30 +2028,46 @@ function tabTiles() {
   h += `<p class="help">${Ed.slot === 0 ? 'Pick the main tile for this ' + (sf.type === 'floor' ? 'floor' : 'wall') + '.' : 'Pick a tile to mix in as design ' + SLOT[Ed.slot] + '. Only tiles of the same size' + (A ? ' (' + mmLabel(A) + ')' : '') + ' can be mixed. Set how they mix in the Mix tab.'}
    ${cur ? `<br>Selected: <b>${esc(cur.name)}</b> · ${mmLabel(cur)} · ${FINISH[cur.finish].label}` : ''}</p>`;
   if (Ed.slot > 0 && L.slots[Ed.slot]) h += `<div class="row-actions"><button class="btn small" data-act="clearSlot">Remove design ${SLOT[Ed.slot]}</button></div>`;
+  const room = Panels.room();
+  const sw = cur ? skidWarn(sf, cur, Ed.proj.room) : '';
+  if (sw) h += `<div class="warn-box">${ICON.warn}<span>${esc(sw)}</span></div>`;
   h += `</div>`;
   const tf = Panels.tf;
   h += `<div class="sec"><div class="chips">
     <button class="chip" data-act="tfUse" data-v="fit" aria-pressed="${tf.use === 'fit'}">${sf.type === 'floor' ? 'Floor tiles' : 'Wall tiles'}</button>
     <button class="chip" data-act="tfUse" data-v="all" aria-pressed="${tf.use === 'all'}">All tiles</button>
     ${Object.entries(FINISH).map(([k, f]) => `<button class="chip" data-act="tfFin" data-v="${k}" aria-pressed="${tf.finish === k}">${f.label}</button>`).join('')}
-  </div>`;
+  </div>
+  <div class="chips room-chips"><button class="chip" data-act="tfRoom" data-v="any" aria-pressed="${room === 'any'}">Any room</button>
+    ${ROOMS.map(([k, l]) => `<button class="chip" data-act="tfRoom" data-v="${k}" aria-pressed="${room === k}">${l}</button>`).join('')}
+    ${WET.includes(room) && sf.type === 'floor' ? `<button class="chip" data-act="tfSkid" aria-pressed="${!!tf.skid}">Anti-skid only</button>` : ''}</div>`;
   let list = allTiles().filter(t => tf.use === 'all' || t.use === 'both' || t.use === sf.type);
   if (tf.finish !== 'any') list = list.filter(t => t.finish === tf.finish);
   if (Ed.slot > 0 && A) list = list.filter(t => sameSize(t, A));
+  let untagged = 0;
+  if (room !== 'any') {
+    // tiles tagged for other rooms drop out; untagged tiles stay, after the tagged ones
+    list = list.filter(t => !(t.rooms && t.rooms.length) || t.rooms.includes(room));
+    untagged = list.filter(t => !(t.rooms && t.rooms.length)).length;
+    list.sort((a, b) => ((b.rooms && b.rooms.length) ? 1 : 0) - ((a.rooms && a.rooms.length) ? 1 : 0));
+    if (tf.skid && WET.includes(room) && sf.type === 'floor') list = list.filter(t => t.antiSkid);
+  }
   h += `<div class="tile-grid">`;
   h += `<button class="tile-card add" data-act="addTile"><span class="sw">${ICON.camera}<span>Add your tile</span></span><span class="tm"><span class="tn">Photo of a tile or a catalog image</span></span></button>`;
-  for (const t of list) h += tileCard(t, L);
-  h += `</div>${list.length ? '' : '<p class="empty">No tiles match. Change the filters or add your own tile.</p>'}</div>`;
+  for (const t of list) h += tileCard(t, L, sf);
+  h += `</div>${list.length ? '' : '<p class="empty">No tiles match. Change the filters or add your own tile.</p>'}
+  ${untagged && room !== 'any' ? `<p class="note">${untagged} of your tiles have no room tags yet, so they are shown last. Tag rooms in Manage tiles to sort them properly.</p>` : ''}</div>`;
   h += `<p class="note mono" data-live="count">${esc(liveCount(sf))}</p>`;
   return h;
 }
-function tileCard(t, L) {
+function tileCard(t, L, sf) {
   const si = L ? L.slots.indexOf(t.id) : -1;
+  const warn = sf ? skidWarn(sf, t, Ed.proj.room) : '';
   return `<button class="tile-card" data-act="pick" data-id="${t.id}" aria-pressed="${L ? L.slots[Ed.slot] === t.id : false}">
     ${si >= 0 ? `<span class="slotmark">${SLOT[si]}</span>` : ''}
     <span class="sw">${thumbImg(t)}</span>
-    <span class="tm"><span class="tn">${esc(t.name)}</span><span class="ts">${mmLabel(t)} · ${ftLabel(t)}</span>
-    <span class="badges"><span class="badge">${FINISH[t.finish] ? FINISH[t.finish].label : t.finish}</span><span class="badge">${t.use === 'both' ? 'Wall + floor' : t.use}</span>${t.sample ? '<span class="badge acc">Sample</span>' : ''}</span></span></button>`;
+    <span class="tm"><span class="tn">${esc(t.name)}</span><span class="ts">${t.brand ? esc(t.brand) + ' · ' : ''}${mmLabel(t)} · ${ftLabel(t)}</span>
+    <span class="badges"><span class="badge">${FINISH[t.finish] ? FINISH[t.finish].label : t.finish}</span><span class="badge">${t.use === 'both' ? 'Wall + floor' : t.use}</span>${t.antiSkid ? '<span class="badge ok">Anti-skid</span>' : ''}${warn ? '<span class="badge warn">Slippery wet</span>' : ''}${t.sample ? '<span class="badge acc">Sample</span>' : ''}</span></span></button>`;
 }
 
 /* ---------- Layout tab ---------- */
@@ -2013,8 +2178,36 @@ function qtyInner() {
   }
   return h;
 }
+/* Side-by-side cost of the A/B/C options on this photo */
+function optionsInner() {
+  const P = Ed.proj; Ed.ensureVariants();
+  if (P.variants.length < 2) {
+    return `<div class="row-actions"><button class="btn small" data-act="addVar">${ICON.plus} Add an option to compare</button></div>
+      <p class="help">Copies this design so you can try other tiles on the same photo. The options then appear here with their cost side by side.</p>`;
+  }
+  Ed.syncVariant();
+  const sums = P.variants.map(v => projectSummary({ surfaces: v.surfaces || [], extra: P.extra }));
+  let h = `<div class="qty-card"><div class="qh"><b>Options on this photo</b><span class="note">tap a row to switch</span></div>
+    <div class="tbl-wrap"><table class="q"><thead><tr><th>Option</th><th>Tiles</th><th>Pieces</th><th>Amount</th></tr></thead><tbody>`;
+  P.variants.forEach((v, i) => {
+    const S = sums[i]; const names = S.totals.map(t => (t.def ? t.def.name : 'Missing tile')).join(', ') || 'No tiles yet';
+    h += `<tr class="opt ${i === P.vi ? 'cur' : ''}" data-act="goVar" data-v="${i}" title="Show ${esc(v.name)}"><td><b>${VLET[i]}</b> · ${esc(v.name)}</td><td class="wrap">${esc(names)}</td>
+      <td class="n">${S.pcs}${S.boxes != null ? `<br><small>${S.boxes} box${S.boxes === 1 ? '' : 'es'}</small>` : ''}</td><td class="n">${S.grand != null ? fmtMoney(S.grand) + (S.allPriced ? '' : '*') : '—'}</td></tr>`;
+  });
+  h += `</tbody></table></div>`;
+  const priced = sums.filter(S => S.grand != null && S.allPriced);
+  if (priced.length >= 2) {
+    const lo = priced.reduce((a, S) => (S.grand < a.grand ? S : a)), hi = priced.reduce((a, S) => (S.grand > a.grand ? S : a));
+    const li = sums.indexOf(lo), hiI = sums.indexOf(hi);
+    if (hi.grand - lo.grand > 0) h += `<p class="help" style="padding:8px 12px 0"><b>${esc(P.variants[hiI].name)}</b> costs <b>${fmtMoney(hi.grand - lo.grand)}</b> more than <b>${esc(P.variants[li].name)}</b>.</p>`;
+  }
+  if (sums.some(S => S.grand != null && !S.allPriced)) h += `<p class="note" style="padding:6px 12px 0">* some tiles have no price in the catalog</p>`;
+  h += `<div class="row-actions" style="padding:10px 12px 12px"><button class="btn small" data-act="cmpImg">${ICON.download} Compare image</button>${P.variants.length < 4 ? `<button class="btn small ghost" data-act="addVar">${ICON.plus} Add option</button>` : ''}</div></div>`;
+  return h;
+}
 function tabQty() {
   return `<div class="sec"><label class="field"><span>Extra for breakage and spares</span><div class="dim"><input class="input" id="qExtra" type="number" inputmode="numeric" min="0" max="50" step="1" data-in="extra" value="${+Ed.proj.extra || 0}" style="width:90px"><span class="u">%</span></div></label></div>
+   <div class="sec" id="qtyOpts">${optionsInner()}</div>
    <div class="sec" id="qtyInner">${qtyInner()}</div>
    <div class="sec"><div class="row-actions"><button class="btn" data-act="copySum">${ICON.copy} Copy summary</button><button class="btn" data-act="exportImg">${ICON.download} Save image</button></div>
    <p class="help">Counts follow the layout on screen. Every piece that needs cutting at an edge, door or window is counted as one full tile. Pieces per box and prices come from your tile catalog.</p></div>`;
@@ -2022,7 +2215,7 @@ function tabQty() {
 function summaryText(proj) {
   const S = projectSummary(proj), U = Settings.units; const out = [];
   out.push(`${Settings.shop || 'Tile estimate'}${Settings.phone ? ' · ' + Settings.phone : ''}`);
-  out.push(`Design: ${proj.name || 'Untitled'}${proj.customer ? ' for ' + proj.customer : ''}`);
+  out.push(`Design: ${proj.name || 'Untitled'}${proj.variants && proj.variants.length > 1 ? ' · ' + proj.variants[proj.vi || 0].name : ''}${proj.customer ? ' for ' + proj.customer : ''}${proj.room ? ' · ' + roomLabel(proj.room) : ''}`);
   for (const s of S.surfaces) {
     out.push(''); out.push(`${s.sf.name}: ${fmtLen(s.sf.W, U)} × ${fmtLen(s.sf.H, U)} (${fmtArea(s.lay ? s.lay.tiledArea : 0, U)})`);
     for (const it of s.items) out.push(`  ${it.def ? it.def.name + ' ' + mmLabel(it.def) : it.id}: ${it.total} pcs (${it.cut} cut)`);
@@ -2046,7 +2239,7 @@ Panels.soft = debounce(function () {
   const sf = Ed.surf();
   $$('[data-live="count"]').forEach(el => { el.textContent = liveCount(sf); });
   const a = $('[data-live="area"]'); if (a && sf) a.textContent = fmtArea(sf.W * sf.H, Settings.units);
-  if (Ed.tab === 'qty') { const q = $('#qtyInner'); if (q) q.innerHTML = qtyInner(); }
+  if (Ed.tab === 'qty') { const q = $('#qtyInner'); if (q) q.innerHTML = qtyInner(); const o = $('#qtyOpts'); if (o) o.innerHTML = optionsInner(); }
 }, 120);
 Panels.refreshThumbs = debounce(() => { if (Ed.proj && !$('#editor').hidden) Panels.render(); }, 300);
 
@@ -2065,6 +2258,12 @@ Panels.bind = function () {
     const act = b.dataset.act, v = b.dataset.v, sf = Ed.surf(), L = sf && sf.layout;
     switch (act) {
       case 'selSurf': Ed.sel = b.dataset.id; if (Ed.mode === 'cut') Ed.setMode('view'); Ed.cutSel = null; Panels.render(); Ed.requestDraw(); break;
+      case 'room': Ed.proj.room = Ed.proj.room === v ? '' : v; Panels.tf.room = 'auto'; Ed.dirty = true; Panels.render(); break;
+      case 'tfRoom': Panels.tf.room = v; Panels.render(); break;
+      case 'tfSkid': Panels.tf.skid = !Panels.tf.skid; Panels.render(); break;
+      case 'goVar': Ed.switchVariant(+v); break;
+      case 'addVar': Ed.addVariant(); break;
+      case 'cmpImg': Exporter.openCompare(); break;
       case 'addSurf': {
         Ed.pushUndo(); const s = Ed.newSurface(b.dataset.type); Ed.prepSurface(s); Ed.proj.surfaces.push(s); Ed.sel = s.id; Ed.tab = 'surfaces';
         Ed.setMode('corners'); Ed.changed(s, { panel: true }); break;
@@ -2263,16 +2462,21 @@ $('#inCamera').addEventListener('change', e => { startFromFile(e.target.files[0]
 $('#inGallery').addEventListener('change', e => { startFromFile(e.target.files[0]); e.target.value = ''; });
 
 /* ---------- catalog screen ---------- */
-const Catalog = { f: 'all' };
+const Catalog = { f: 'all', room: 'any' };
 Catalog.render = function () {
-  $('#catFilter').innerHTML = [['all', 'All'], ['wall', 'Wall'], ['floor', 'Floor'], ['mine', 'My tiles']].map(([v, l]) => `<button class="chip" data-f="${v}" aria-pressed="${Catalog.f === v}">${l}</button>`).join('');
+  $('#catFilter').innerHTML = [['all', 'All'], ['wall', 'Wall'], ['floor', 'Floor'], ['mine', 'My tiles']].map(([v, l]) => `<button class="chip" data-f="${v}" aria-pressed="${Catalog.f === v}">${l}</button>`).join('')
+    + `<span style="flex-basis:100%;height:0"></span>` + [['any', 'Any room'], ...ROOMS].map(([v, l]) => `<button class="chip" data-r="${v}" aria-pressed="${Catalog.room === v}" style="min-height:32px;font-size:13px">${l}</button>`).join('');
   $('#catSamples').checked = Cat.showSamples;
   let list = Catalog.f === 'mine' ? [...Cat.own] : allTiles();
   if (Catalog.f === 'wall' || Catalog.f === 'floor') list = list.filter(t => t.use === Catalog.f || t.use === 'both');
+  if (Catalog.room !== 'any') list = list.filter(t => t.rooms && t.rooms.includes(Catalog.room));
   $('#catGrid').innerHTML = `<button class="tile-card add" data-add="1"><span class="sw">${ICON.camera}<span>Add your tile</span></span><span class="tm"><span class="tn">Photo of a tile or a catalog image</span></span></button>` +
     list.map(t => tileCard(t, null).replace('data-act="pick"', 'data-edit="1"')).join('');
 };
-$('#catFilter').addEventListener('click', e => { const b = e.target.closest('[data-f]'); if (!b) return; Catalog.f = b.dataset.f; Catalog.render(); });
+$('#catFilter').addEventListener('click', e => {
+  const r = e.target.closest('[data-r]'); if (r) { Catalog.room = r.dataset.r; Catalog.render(); return; }
+  const b = e.target.closest('[data-f]'); if (!b) return; Catalog.f = b.dataset.f; Catalog.render();
+});
 $('#catSamples').addEventListener('change', e => { Cat.showSamples = e.target.checked; Store.saveSettings().catch(() => { }); Catalog.render(); });
 $('#catGrid').addEventListener('click', e => {
   const b = e.target.closest('.tile-card'); if (!b) return;
@@ -2283,12 +2487,13 @@ $('#catGrid').addEventListener('click', e => {
 /* ---------- tile add/edit modal (photo → straightened texture) ---------- */
 const TileModal = {};
 TileModal.open = function (tile, onSaved) {
-  const isSample = tile && tile.sample; const t = tile ? Object.assign({}, tile) : { name: '', code: '', wmm: 600, hmm: 1200, use: 'wall', finish: 'glossy', perBox: 2, price: '' };
+  const isSample = tile && tile.sample; const t = tile ? Object.assign({}, tile) : { name: '', code: '', wmm: 600, hmm: 1200, use: 'wall', finish: 'glossy', perBox: 2, price: '', rooms: [], antiSkid: false, brand: '', thick: '' };
+  const roomsTxt = (t.rooms && t.rooms.length) ? t.rooms.map(roomLabel).filter(Boolean).join(', ') : '';
   const st = { src: null, pts: null, even: true, newTex: null };
   const presetKey = SIZE_PRESETS.find(p => p.w === +t.wmm && p.h === +t.hmm) ? `${t.wmm}x${t.hmm}` : 'custom';
   const html = `<h3>${isSample ? esc(t.name) : tile ? 'Edit tile' : 'Add your tile'}</h3>
    ${isSample ? `<p class="help">This is a built-in sample design to try the app. Add photos of your own showroom tiles to use them with customers. You can hide samples from the catalog screen.</p>
-      <div class="tm-prev"><img src="${esc(tileThumb(t))}" alt="" style="width:120px;border-radius:6px"><div><b>${mmLabel(t)}</b> · ${ftLabel(t)}<br>${FINISH[t.finish].label} · ${t.use === 'both' ? 'Wall and floor' : t.use}</div></div>
+      <div class="tm-prev"><img src="${esc(tileThumb(t))}" alt="" style="width:120px;border-radius:6px"><div><b>${mmLabel(t)}</b> · ${ftLabel(t)}<br>${FINISH[t.finish].label} · ${t.use === 'both' ? 'Wall and floor' : t.use}${t.antiSkid ? ' · Anti-skid' : ''}${roomsTxt ? '<br><span class="note">' + esc(roomsTxt) + '</span>' : ''}</div></div>
       <div class="acts"><button class="btn primary" data-x="close">Close</button></div>` : `
    <div id="tmPick" ${tile ? 'hidden' : ''}>
      <p class="help" style="margin-bottom:10px">Lay the tile flat in even light and photograph it from straight above, or use the maker's catalog image.</p>
@@ -2309,6 +2514,13 @@ TileModal.open = function (tile, onSaved) {
    <div class="field" id="tmCustom" ${presetKey === 'custom' ? '' : 'hidden'}><span>Width × height (mm)</span><div class="dim"><input class="input" id="tmW" type="number" inputmode="numeric" value="${t.wmm}" style="width:110px"><span class="u">×</span><input class="input" id="tmH" type="number" inputmode="numeric" value="${t.hmm}" style="width:110px"><span class="u">mm</span></div></div>
    <div class="field"><span>Used on</span><div class="seg" id="tmUse">${[['wall', 'Wall'], ['floor', 'Floor'], ['both', 'Both']].map(([v, l]) => `<button type="button" data-v="${v}" aria-pressed="${t.use === v}">${l}</button>`).join('')}</div></div>
    <div class="field"><span>Finish</span><div class="seg" id="tmFin">${Object.entries(FINISH).map(([v, f]) => `<button type="button" data-v="${v}" aria-pressed="${t.finish === v}">${f.label}</button>`).join('')}</div></div>
+   <div class="field"><span>Suitable rooms</span><div class="chips room-chips" id="tmRooms">${ROOMS.map(([k, l]) => `<button type="button" class="chip" data-v="${k}" aria-pressed="${(t.rooms || []).includes(k)}">${l}</button>`).join('')}</div>
+     <p class="help">Customers see these tiles first when the photo is of that room.</p></div>
+   <label class="check"><input type="checkbox" id="tmSkid" ${t.antiSkid ? 'checked' : ''}> Anti-skid · safe on wet floors (bathroom, balcony, parking)</label>
+   <div class="grid2">
+     <label class="field"><span>Brand</span><input id="tmBrand" value="${esc(t.brand || '')}" placeholder="e.g. Kajaria"></label>
+     <label class="field"><span>Thickness (mm)</span><input id="tmThick" type="number" inputmode="decimal" min="0" step="0.5" value="${t.thick ?? ''}" placeholder="Optional"></label>
+   </div>
    <div class="grid2">
      <label class="field"><span>Pieces per box</span><input id="tmBox" type="number" inputmode="numeric" min="1" value="${t.perBox ?? ''}" placeholder="e.g. 2"></label>
      <label class="field"><span>Price per box (₹)</span><input id="tmPrice" type="number" inputmode="decimal" min="0" value="${t.price ?? ''}" placeholder="Optional"></label>
@@ -2328,6 +2540,7 @@ TileModal.open = function (tile, onSaved) {
         return;
       }
       const sb = e.target.closest('.seg button'); if (sb && sb.closest('#tmUse,#tmFin')) { $$('button', sb.parentElement).forEach(x => x.setAttribute('aria-pressed', String(x === sb))); }
+      const rc = e.target.closest('#tmRooms .chip'); if (rc) rc.setAttribute('aria-pressed', String(rc.getAttribute('aria-pressed') !== 'true'));
     });
     if (isSample) return;
     $('#tmSize').addEventListener('change', e => { $('#tmCustom').hidden = e.target.value !== 'custom'; drawPrev(); });
@@ -2394,6 +2607,8 @@ TileModal.open = function (tile, onSaved) {
       name, code: $('#tmCode').value.trim(), wmm: Math.round(w), hmm: Math.round(h),
       use: $('#tmUse [aria-pressed="true"]').dataset.v, finish: $('#tmFin [aria-pressed="true"]').dataset.v,
       perBox: parseInt($('#tmBox').value, 10) || null, price: parseFloat($('#tmPrice').value) || null,
+      rooms: $$('#tmRooms .chip[aria-pressed="true"]').map(b => b.dataset.v), antiSkid: $('#tmSkid').checked,
+      brand: $('#tmBrand').value.trim(), thick: parseFloat($('#tmThick').value) || null,
     });
     const btn = $('[data-x="save"]'); btn.disabled = true; btn.textContent = 'Saving…';
     try {
@@ -2463,13 +2678,14 @@ function openSettings() {
 
 /* ---------- save design ---------- */
 function shortSummary(proj) {
-  const S = projectSummary(proj); const n = proj.surfaces.length;
-  return `${n} surface${n === 1 ? '' : 's'} · ${S.pcs} pcs${S.boxes != null ? ' · ' + S.boxes + ' boxes' : ''}`;
+  const S = projectSummary(proj); const n = proj.surfaces.length; const nv = proj.variants ? proj.variants.length : 1;
+  return `${n} surface${n === 1 ? '' : 's'} · ${S.pcs} pcs${S.boxes != null ? ' · ' + S.boxes + ' boxes' : ''}${nv > 1 ? ' · ' + nv + ' options' : ''}`;
 }
 async function makeThumb() {
   Ed.renderNow(); const src = GL.ok ? GL.canvas : Ed.photo; const s = Math.min(1, 520 / src.width);
   const c = document.createElement('canvas'); c.width = Math.round(src.width * s); c.height = Math.round(src.height * s);
-  c.getContext('2d').drawImage(src, 0, 0, c.width, c.height); return canvasToBlob(c, 'image/jpeg', 0.82);
+  const x = c.getContext('2d'); x.drawImage(src, 0, 0, c.width, c.height); applyLight(x, c.width, c.height, Ed.proj.lightMode);
+  return canvasToBlob(c, 'image/jpeg', 0.82);
 }
 function openSave(after) {
   const P = Ed.proj;
@@ -2487,7 +2703,7 @@ function openSave(after) {
       $('#projName').value = P.name;
       const asNew = b.dataset.x === 'copy'; $$('[data-x]', s).forEach(x => (x.disabled = true)); b.textContent = 'Saving…';
       try {
-        P._summary = shortSummary(P);
+        Ed.syncVariant(); P._summary = shortSummary(P);
         const rec = await Store.saveProject(P, Ed.photo, await makeThumb(), asNew);
         Object.assign(P, { id: rec.id, createdAt: rec.createdAt, updatedAt: rec.updatedAt, photo: rec.photo, thumb: rec.thumb });
         Ed.dirty = false; close(); toast(asNew ? 'Saved as a new design' : 'Design saved'); if (after) after();
@@ -2507,11 +2723,12 @@ Exporter.compose = async function () {
   const surfLine = S.surfaces.map(s => `${s.sf.name} ${fmtLen(s.sf.W, U)} × ${fmtLen(s.sf.H, U)}`).join('   ·   ');
   const fh = pad * 2 + lh * 2.6 + lines.length * lh * 1.5 + lh * 1.6;
   const c = document.createElement('canvas'); c.width = W; c.height = Math.round(ih + fh); const x = c.getContext('2d');
-  x.imageSmoothingQuality = 'high'; x.drawImage(src, 0, 0, W, ih);
+  x.imageSmoothingQuality = 'high'; x.drawImage(src, 0, 0, W, ih); applyLight(x, W, ih, P.lightMode);
   x.fillStyle = '#ffffff'; x.fillRect(0, ih, W, c.height - ih); x.fillStyle = '#2249b3'; x.fillRect(0, ih, W, Math.max(4, Math.round(W * 0.004)));
   let y = ih + pad + fs; x.textBaseline = 'alphabetic';
   x.fillStyle = '#15202b'; x.font = `700 ${Math.round(fs * 1.35)}px "Bricolage Grotesque", "Segoe UI", sans-serif`;
-  x.fillText(P.name || 'Tile design', pad, y);
+  const optName = P.variants && P.variants.length > 1 ? ' · ' + P.variants[P.vi || 0].name : '';
+  x.fillText((P.name || 'Tile design') + optName, pad, y, W * 0.6);
   x.textAlign = 'right'; x.font = `600 ${fs}px "Instrument Sans", system-ui, sans-serif`; x.fillStyle = '#596674';
   x.fillText([Settings.shop, Settings.phone].filter(Boolean).join(' · ') || fmtDate(Date.now()), W - pad, y); x.textAlign = 'left';
   y += lh * 1.1; x.font = `500 ${Math.round(fs * 0.85)}px "IBM Plex Mono", monospace`; x.fillStyle = '#596674';
@@ -2526,19 +2743,85 @@ Exporter.compose = async function () {
     y += lh * 1.5;
   }
   x.fillStyle = '#596674'; x.font = `500 ${Math.round(fs * 0.78)}px "Instrument Sans", system-ui, sans-serif`;
-  x.fillText(`Includes ${S.extra}% extra. Cut pieces at edges counted as full tiles. Preview only: colours may vary from the actual tile.`, pad, y + fs * 0.6, W - pad * 2);
+  const lightNote = P.lightMode && P.lightMode !== 'day' ? ` Shown in ${lightDef(P.lightMode).label.toLowerCase()}.` : '';
+  x.fillText(`Includes ${S.extra}% extra. Cut pieces at edges counted as full tiles.${lightNote} Preview only: colours may vary from the actual tile.`, pad, y + fs * 0.6, W - pad * 2);
   return c;
+};
+/* Render one option (its surfaces over the current photo) to a plain canvas */
+Exporter.renderVariant = function (v) {
+  const surfaces = cleanJSON(v.surfaces || []); for (const s of surfaces) Ed.prepSurface(s);
+  const src = GL.ok ? GL.render(surfaces, Ed.photo, { keep: v.keep || [] }) : Ed.photo;
+  const c = document.createElement('canvas'); c.width = src.width; c.height = src.height;
+  const x = c.getContext('2d'); x.drawImage(src, 0, 0); applyLight(x, c.width, c.height, Ed.proj.lightMode);
+  for (const s of surfaces) GL.releaseSurface(s);
+  return c;
+};
+/* All options side by side, each with its tiles and cost */
+Exporter.composeCompare = async function () {
+  Ed.syncVariant(); const P = Ed.proj, V = P.variants, U = Settings.units;
+  const imgs = V.map(v => Exporter.renderVariant(v)); Ed.requestRender();
+  const n = imgs.length, portrait = Ed.photo.height > Ed.photo.width;
+  const cols = portrait ? n : (n <= 2 ? n : 2), rows = Math.ceil(n / cols);
+  const cw = Math.round(Math.min(900, Math.max(540, 1800 / cols))); const sc = cw / Ed.photo.width, ch = Math.round(Ed.photo.height * sc);
+  const pad = Math.round(cw * 0.035), fs = Math.round(Math.max(15, cw * 0.028)), lab = Math.round(fs * 2.3);
+  const sums = V.map(v => projectSummary({ surfaces: v.surfaces || [], extra: P.extra }));
+  const sw = Math.round(fs * 1.5), rowH = sw + Math.round(fs * 0.35);
+  const maxItems = Math.max(1, ...sums.map(S => Math.min(3, S.totals.length)));
+  const foot = Math.round(fs * 0.7) + maxItems * rowH + Math.round(fs * 0.6);
+  const head = Math.round(fs * 2.6);
+  const W = cols * cw + (cols + 1) * pad, H = head + rows * (lab + ch + foot) + Math.round(fs * 1.6) + pad;
+  const c = document.createElement('canvas'); c.width = W; c.height = H; const x = c.getContext('2d');
+  x.fillStyle = '#ffffff'; x.fillRect(0, 0, W, H); x.imageSmoothingQuality = 'high'; x.textBaseline = 'alphabetic';
+  x.fillStyle = '#15202b'; x.font = `700 ${Math.round(fs * 1.3)}px "Bricolage Grotesque", "Segoe UI", sans-serif`;
+  x.fillText((P.name || 'Tile design') + (P.customer ? ' · ' + P.customer : ''), pad, pad + fs * 0.9, W * 0.6);
+  x.textAlign = 'right'; x.font = `600 ${Math.round(fs * 0.9)}px "Instrument Sans", system-ui, sans-serif`; x.fillStyle = '#596674';
+  x.fillText([Settings.shop, Settings.phone].filter(Boolean).join(' · ') || fmtDate(Date.now()), W - pad, pad + fs * 0.9); x.textAlign = 'left';
+  x.fillStyle = '#2249b3'; x.fillRect(0, head - 3, W, 3);
+  imgs.forEach((im, i) => {
+    const col = i % cols, row = Math.floor(i / cols); const x0 = pad + col * (cw + pad), y0 = head + row * (lab + ch + foot);
+    const v = V[i], S = sums[i];
+    x.fillStyle = '#2249b3'; x.font = `700 ${Math.round(fs * 1.15)}px "Bricolage Grotesque", "Segoe UI", sans-serif`; x.fillText(VLET[i], x0, y0 + fs * 1.5);
+    let nameW = cw - fs * 1.4;
+    if (S.grand != null) { x.fillStyle = '#15202b'; x.font = `700 ${fs}px "IBM Plex Mono", monospace`; x.textAlign = 'right'; const gt = fmtMoney(S.grand) + (S.allPriced ? '' : '*'); x.fillText(gt, x0 + cw, y0 + fs * 1.5); nameW -= x.measureText(gt).width + fs; x.textAlign = 'left'; }
+    x.fillStyle = '#15202b'; x.font = `700 ${Math.round(fs * 1.15)}px "Bricolage Grotesque", "Segoe UI", sans-serif`; x.fillText(v.name, x0 + fs * 1.4, y0 + fs * 1.5, Math.max(fs * 4, nameW));
+    x.drawImage(im, x0, y0 + lab, cw, ch);
+    x.strokeStyle = 'rgba(0,0,0,.12)'; x.lineWidth = 1; x.strokeRect(x0 + 0.5, y0 + lab + 0.5, cw - 1, ch - 1);
+    let ty = y0 + lab + ch + Math.round(fs * 0.7);
+    const items = S.totals.slice(0, 3);
+    items.forEach(t => {
+      const def = t.def; if (def) { const tex = def.sample ? getTex(def, 0) : TEX.get(texKey(def, 0)); if (tex instanceof HTMLCanvasElement) x.drawImage(tex, x0, ty, sw, sw); else { x.fillStyle = '#ddd'; x.fillRect(x0, ty, sw, sw); } }
+      x.fillStyle = '#15202b'; x.font = `600 ${Math.round(fs * 0.85)}px "Instrument Sans", system-ui, sans-serif`;
+      x.fillText(def ? def.name : 'Missing tile', x0 + sw + fs * 0.5, ty + fs * 0.75, cw - sw - fs * 0.5);
+      x.fillStyle = '#596674'; x.font = `500 ${Math.round(fs * 0.72)}px "IBM Plex Mono", monospace`;
+      x.fillText(`${def ? mmLabel(def) + ' · ' : ''}${t.withExtra} pcs${t.boxes != null ? ' · ' + t.boxes + ' boxes' : ''}${t.cost != null ? ' · ' + fmtMoney(t.cost) : ''}`, x0 + sw + fs * 0.5, ty + fs * 1.6, cw - sw - fs * 0.5);
+      ty += rowH;
+    });
+    if (S.totals.length > 3) { x.fillStyle = '#596674'; x.font = `500 ${Math.round(fs * 0.72)}px "Instrument Sans", system-ui, sans-serif`; x.fillText(`+ ${S.totals.length - 3} more`, x0 + sw + fs * 0.5, ty + fs * 0.4); }
+  });
+  x.fillStyle = '#596674'; x.font = `500 ${Math.round(fs * 0.7)}px "Instrument Sans", system-ui, sans-serif`;
+  const lightNote = P.lightMode && P.lightMode !== 'day' ? ` Shown in ${lightDef(P.lightMode).label.toLowerCase()}.` : '';
+  x.fillText(`Includes ${P.extra || 0}% extra.${lightNote} Preview only: colours may vary from the actual tile.`, pad, H - pad - fs * 0.2, W - pad * 2);
+  return c;
+};
+Exporter.openCompare = async function () {
+  if (!Ed.proj || !Ed.proj.variants || Ed.proj.variants.length < 2) { toast('Add a second option first (the + Option button on the photo).'); return; }
+  busy(true, 'Preparing comparison…'); let c;
+  try { c = await Exporter.composeCompare(); } finally { busy(false); }
+  return Exporter.show(c, '-options', 'Options side by side');
 };
 Exporter.open = async function () {
   busy(true, 'Preparing image…'); let c;
   try { c = await Exporter.compose(); } finally { busy(false); }
+  return Exporter.show(c, '', 'Image with estimate');
+};
+Exporter.show = async function (c, suffix, title) {
   const blob = await canvasToBlob(c, 'image/jpeg', 0.9); const url = URL.createObjectURL(blob);
   const dl = window.claude && window.claude.use ? await Promise.race([window.claude.use('downloads'), sleep(2500).then(() => null)]) : null;
-  const name = (Ed.proj.name || 'tile-design').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase() || 'tile-design';
+  const name = ((Ed.proj.name || 'tile-design').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase() || 'tile-design') + (suffix || '');
   let top = false; try { top = window.self === window.top && !(window.claude && window.claude.use); } catch (e) { top = false; }
   let file = null; try { file = new File([blob], name + '.jpg', { type: 'image/jpeg' }); } catch (e) { file = null; }
   const canShare = top && file && navigator.canShare && navigator.canShare({ files: [file] });
-  openModal(`<h3>Image with estimate</h3><img class="export-img" src="${url}" alt="Tiled photo with the tile estimate">
+  openModal(`<h3>${esc(title || 'Image with estimate')}</h3><img class="export-img" src="${url}" alt="Tiled photo with the tile estimate">
     ${dl || top ? '' : '<p class="help">Press and hold the image to save or share it.</p>'}
     <div class="acts"><button class="btn" data-x="close">Close</button>${dl ? `<button class="btn primary" data-x="dl">${ICON.download} Save to phone</button>` : ''}
     ${top ? `<a class="btn" href="${url}" download="${name}.jpg">${ICON.download} Download</a>` : ''}${canShare ? `<button class="btn primary" data-x="share">Share (WhatsApp…)</button>` : ''}</div>`, (s, close) => {
@@ -2611,7 +2894,7 @@ const AR = {
   sess: null, gl: null, ref: null, viewerSpace: null, hitSrc: null, binding: null, support: null, level: 0,
   state: 'off', floorY: null, surfaces: [], sel: null, pts: [], wall: null, cutA: null,
   ret: null, retOK: false, cam: [0, 0, 0], camOK: false, depthFmt: null, depthInfo: null, depthOK: false, occl: false,
-  bright: 1, lightAmt: 0.6, square: true, pickSlot: 0, snapReq: false, lastCap: null, saved: false, exitTo: null, frameN: 0,
+  bright: 1, lightAmt: 0.6, square: true, floorShape: 'rect', lastWallH: 3.048, cand: null, touch: null, drag: null, hist: [], scanYs: [], tip: null, pickSlot: 0, snapReq: false, lastCap: null, saved: false, exitTo: null, frameN: 0,
 };
 window.AR = AR;
 const AR_WHY = {
@@ -2713,7 +2996,7 @@ AR.releaseSurf = function (sf) { const gl = AR.gl; if (!gl) return; if (sf._art)
 function arPoint(sf, X, Y) { const a = sf.ar; return v3.add(a.O, v3.add(v3.mul(a.ex, X / 1000), v3.mul(a.ey, Y / 1000))); }
 function arEnsureSurf(sf) {
   const gl = AR.gl; const ver = (sf._v || 0) + ':' + sf.W + 'x' + sf.H;
-  if (!sf._art || sf._artv !== ver || sf._pending) {
+  if ((!sf._art || sf._artv !== ver || sf._pending) && !(sf._dragging && sf._art)) {
     const lay = computeLayout(sf); sf._lay = lay; const { flat } = paintFlat(sf, lay, AR.maxTex);
     if (!sf._art) sf._art = gl.createTexture(); arTexUpload(sf._art, flat); sf._artv = ver;
   }
@@ -2749,65 +3032,52 @@ function arDrawSurfaces(P, V, vp) {
   }
   gl.disableVertexAttribArray(1);
 }
-/* markers: reticle, measured points and edges */
+/* markers: reticle, measured points, handles and edges */
 function arDrawMarkers(P, V) {
   const pos = [], col = [];
   const vert = (p, c) => { pos.push(p[0], p[1], p[2]); col.push(c[0] * c[3], c[1] * c[3], c[2] * c[3], c[3]); };
   const basis = n => { const t1 = v3.norm(v3.cross(n, Math.abs(n[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0])); return [t1, v3.cross(n, t1)]; };
   const ring = (c, n, r0, r1, cc, seg = 28) => {
-    const [a, b] = basis(n);
-    for (let i = 0; i < seg; i++) {
-      const t0 = i / seg * Math.PI * 2, t1 = (i + 1) / seg * Math.PI * 2;
-      const q = (t, r) => v3.add(c, v3.add(v3.mul(a, Math.cos(t) * r), v3.mul(b, Math.sin(t) * r)));
-      const A = q(t0, r0), B = q(t0, r1), C = q(t1, r1), D = q(t1, r0);
-      vert(A, cc); vert(B, cc); vert(C, cc); vert(A, cc); vert(C, cc); vert(D, cc);
-    }
+    const [a, b] = basis(n); const q = (t, r) => v3.add(c, v3.add(v3.mul(a, Math.cos(t) * r), v3.mul(b, Math.sin(t) * r)));
+    for (let i = 0; i < seg; i++) { const t0 = i / seg * Math.PI * 2, t1 = (i + 1) / seg * Math.PI * 2; const A = q(t0, r0), B = q(t0, r1), C = q(t1, r1), D = q(t1, r0); vert(A, cc); vert(B, cc); vert(C, cc); vert(A, cc); vert(C, cc); vert(D, cc); }
   };
   const seg = (a, b, n, w, cc) => {
+    if (v3.len(v3.sub(b, a)) < 1e-4) return;
     const d = v3.norm(v3.sub(b, a)); const s = v3.mul(v3.norm(v3.cross(n, d)), w / 2);
-    const A = v3.sub(a, s), B = v3.add(a, s), C = v3.add(b, s), D = v3.sub(b, s);
-    vert(A, cc); vert(B, cc); vert(C, cc); vert(A, cc); vert(C, cc); vert(D, cc);
+    const A = v3.sub(a, s), B = v3.add(a, s), C = v3.add(b, s), D = v3.sub(b, s); vert(A, cc); vert(B, cc); vert(C, cc); vert(A, cc); vert(C, cc); vert(D, cc);
   };
-  const lift = (p, n, h = 0.002) => v3.add(p, v3.mul(n, h));
-  const W = [1, 1, 1, 0.95], Y = [1, 0.8, 0.25, 0.95], ACCn = [0.36, 0.51, 1, 0.95];
+  const lift = (p, n, h = 0.003) => v3.add(p, v3.mul(n, h));
+  const dot = (p, n, r = 0.024) => { ring(lift(p, n), n, 0, r, [1, 1, 1, 0.95]); ring(lift(p, n), n, r, r + 0.006, [0.14, 0.29, 0.86, 0.95]); };
+  const W = [1, 1, 1, 0.95], Wf = [1, 1, 1, 0.55], Y = [1, 0.8, 0.25, 0.95], ACCn = [0.36, 0.51, 1, 0.95];
   const st = AR.state, up = [0, 1, 0];
-  const measuring = ['floor', 'wallA', 'wallB', 'wallH', 'cutA', 'cutB', 'scan'].includes(st);
-  // completed surfaces: outline the selected one
   const sel = AR.surfaces.find(s => s.id === AR.sel);
   if (sel && st === 'done') {
     const n = sel.ar.n; const pts = sel.poly ? sel.poly.map(q => arPoint(sel, q.x, q.y)) : [[0, 0], [sel.W, 0], [sel.W, sel.H], [0, sel.H]].map(([X, Y2]) => arPoint(sel, X, Y2));
-    for (let i = 0; i < pts.length; i++) seg(lift(pts[i], n, 0.004), lift(pts[(i + 1) % pts.length], n, 0.004), n, 0.012, ACCn);
+    for (let i = 0; i < pts.length; i++) seg(lift(pts[i], n, 0.005), lift(pts[(i + 1) % pts.length], n, 0.005), n, 0.012, ACCn);
   }
+  const p = AR.pts, c = AR.cand ? AR.cand.p : null;
   if (st === 'floor') {
-    const p = AR.pts;
-    for (let i = 0; i < p.length; i++) { ring(lift(p[i], up), up, 0, 0.022, W); if (i) seg(lift(p[i - 1], up), lift(p[i], up), up, 0.01, W); }
-    if (p.length && AR.ret) seg(lift(p[p.length - 1], up), lift(AR.ret.p, up), up, 0.008, [1, 1, 1, 0.6]);
-  }
-  if (st === 'wallB' || st === 'wallH') {
-    const p = AR.pts; ring(lift(p[0], up), up, 0, 0.022, W);
-    if (st === 'wallB' && AR.ret) seg(lift(p[0], up), lift(AR.ret.p, up), up, 0.008, [1, 1, 1, 0.6]);
-    if (st === 'wallH') {
-      const w = AR.wall; ring(lift(w.b1, up), up, 0, 0.022, W); seg(lift(w.b0, up), lift(w.b1, up), up, 0.01, W);
-      if (AR.ret) {
-        const h = Math.max(0, AR.ret.p[1] - AR.floorY); const t0 = [w.b0[0], AR.floorY + h, w.b0[2]], t1 = [w.b1[0], AR.floorY + h, w.b1[2]];
-        const n = w.n; seg(lift(w.b0, n), lift(t0, n), n, 0.01, W); seg(lift(w.b1, n), lift(t1, n), n, 0.01, W); seg(lift(t0, n), lift(t1, n), n, 0.01, Y);
-      }
+    for (let i = 0; i < p.length; i++) { dot(p[i], up); if (i) seg(lift(p[i - 1], up), lift(p[i], up), up, 0.012, W); }
+    if (c && p.length) {
+      if (AR.floorShape === 'rect' && p.length === 2) { const r = AR.rectFrom(p[0], p[1], c); if (r) for (let i = 0; i < 4; i++) seg(lift(r[i], up), lift(r[(i + 1) % 4], up), up, 0.01, i === 0 ? W : Y); }
+      else seg(lift(p[p.length - 1], up), lift(c, up), up, 0.01, Wf);
     }
   }
-  if (st === 'cutB' && AR.cutA && AR.ret && sel) {
-    const n = sel.ar.n, a = AR.cutA, b = AR.ret.p; const c1 = [b[0], a[1], b[2]], c2 = [a[0], b[1], a[2]];
-    seg(lift(a, n), lift(c1, n), n, 0.01, Y); seg(lift(c1, n), lift(b, n), n, 0.01, Y); seg(lift(b, n), lift(c2, n), n, 0.01, Y); seg(lift(c2, n), lift(a, n), n, 0.01, Y);
+  if (st === 'wallB' && p.length) { dot(p[0], up); if (c) seg(lift(p[0], up), lift(c, up), up, 0.012, Wf); }
+  if (st === 'cutB' && AR.cutA && c && sel) {
+    const n = sel.ar.n, a = AR.cutA; const ex = sel.ar.ex; const da = v3.dot(v3.sub(c, a), ex);
+    const c1 = v3.add(a, v3.mul(ex, da)), c2 = v3.sub(c, v3.mul(ex, da));
+    seg(lift(a, n), lift(c1, n), n, 0.012, Y); seg(lift(c1, n), lift(c, n), n, 0.012, Y); seg(lift(c, n), lift(c2, n), n, 0.012, Y); seg(lift(c2, n), lift(a, n), n, 0.012, Y);
   }
-  if (measuring && AR.ret) {
-    const n = AR.ret.n; const ok = AR.retOK; const c = lift(AR.ret.p, n, 0.003);
-    ring(c, n, 0.045, 0.058, ok ? W : Y); ring(c, n, 0, 0.008, ok ? W : Y);
-  }
+  if (st === 'cutB' && AR.cutA && sel) dot(AR.cutA, sel.ar.n);
+  if (c) { const n = AR.cand.n; ring(lift(c, n, 0.004), n, 0.03, 0.04, W); ring(lift(c, n, 0.004), n, 0, 0.007, W); }
+  if (st === 'scan' && AR.ret) { const n = AR.ret.n, q = lift(AR.ret.p, n); const cc = AR.retOK ? W : Y; ring(q, n, 0.045, 0.058, cc); ring(q, n, 0, 0.008, cc); }
   if (!pos.length) return;
   const gl = AR.gl, S = AR.pC;
   gl.useProgram(S.p); gl.uniformMatrix4fv(S.L.uP, false, P); gl.uniformMatrix4fv(S.L.uV, false, V);
   gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); gl.disable(gl.DEPTH_TEST);
   const n = pos.length / 3; const d = new Float32Array(n * 7);
-  for (let i = 0; i < n; i++) { d.set(pos.slice(i * 3, i * 3 + 3), i * 7); d.set(col.slice(i * 4, i * 4 + 4), i * 7 + 3); }
+  for (let i = 0; i < n; i++) { d[i * 7] = pos[i * 3]; d[i * 7 + 1] = pos[i * 3 + 1]; d[i * 7 + 2] = pos[i * 3 + 2]; d[i * 7 + 3] = col[i * 4]; d[i * 7 + 4] = col[i * 4 + 1]; d[i * 7 + 5] = col[i * 4 + 2]; d[i * 7 + 6] = col[i * 4 + 3]; }
   gl.bindBuffer(gl.ARRAY_BUFFER, AR.bufDyn); gl.bufferData(gl.ARRAY_BUFFER, d, gl.DYNAMIC_DRAW);
   gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 28, 0);
   gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 28, 12);
@@ -2870,7 +3140,8 @@ AR.variants = function (root) {
 };
 AR.reset = function () {
   for (const sf of AR.surfaces) AR.releaseSurf(sf);
-  Object.assign(AR, { state: 'off', floorY: null, surfaces: [], sel: null, pts: [], wall: null, cutA: null, ret: null, retOK: false, lastCap: null, saved: false, savedId: null, savedName: null, exitTo: null, camOK: false, depthOK: false, occl: false, pickSlot: 0 });
+  Object.assign(AR, { state: 'off', floorY: null, surfaces: [], sel: null, pts: [], wall: null, cutA: null, ret: null, retOK: false, lastCap: null, saved: false, savedId: null, savedName: null, exitTo: null, camOK: false, depthOK: false, occl: false, pickSlot: 0,
+    cand: null, touch: null, drag: null, hist: [], scanYs: [], tip: null });
 };
 AR.start = function () {
   if (AR.sess) return;
@@ -2895,7 +3166,6 @@ AR.fail = function (msg) {
 AR.onSession = async function (session) {
   AR.sess = session; const gl = AR.gl;
   session.addEventListener('end', AR.onEnd);
-  session.addEventListener('select', () => AR.action());
   try { if (gl.makeXRCompatible) await gl.makeXRCompatible(); } catch (e) { console.warn('makeXRCompatible', e); }
   try {
     session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl, { antialias: true, alpha: true }) });
@@ -2936,16 +3206,17 @@ AR.onFrame = function (t, frame) {
   if (!pose) { AR.setMsg('Hold the phone still for a moment…'); return; }
   AR.frameN++;
   const view = pose.views[0]; const vp = layer.getViewport(view);
-  const m = pose.transform.matrix; const org = [m[12], m[13], m[14]], fwd = v3.norm([-m[8], -m[9], -m[10]]); AR.cam = org;
+  const m = pose.transform.matrix; const org = [m[12], m[13], m[14]]; AR.cam = org;
   let camTex = null;
   if (AR.binding && view.camera) { try { camTex = AR.binding.getCameraImage(view.camera); } catch (e) { camTex = null; } }
   if (camTex && !AR.camOK) { AR.camOK = true; }
   AR.camFresh = !!camTex;
   if (camTex && AR.frameN % 3 === 1) arUpdateCamLow(camTex, vp);
   arUpdateDepth(frame, view);
-  AR.reticle(frame, org, fwd);
+  AR.scanFloor(frame, org);
   gl.bindFramebuffer(gl.FRAMEBUFFER, layer.framebuffer); gl.viewport(vp.x, vp.y, vp.width, vp.height);
   const P = view.projectionMatrix, V = view.transform.inverse.matrix; AR.P = P; AR.V = V;
+  if (AR.touch && AR.touch.pin) AR.updateCand(AR.touch.pin[0], AR.touch.pin[1]); // keep the pin on the floor while the phone moves
   arDrawSurfaces(P, V, vp); arDrawMarkers(P, V);
   if (AR.snapReq) {
     AR.snapReq = false;
@@ -2959,37 +3230,27 @@ AR.onFrame = function (t, frame) {
       AR.onCapture(raw, comp, new Float32Array(P), new Float32Array(V));
     } else AR.onCapture(null);
   }
-  if (AR.frameN % 2 === 0) AR.labels(P, V);
-  const btn = $('#arMain'); if (btn) { const need = AR.state !== 'done' && AR.state !== 'idle'; if (need) btn.disabled = !AR.retOK; }
+  AR.labels(P, V);
+  if (AR.state === 'scan') { const btn = $('#arMain'); if (btn) btn.disabled = !AR.retOK; }
 };
-AR.reticle = function (frame, org, fwd) {
-  AR.ret = null; AR.retOK = false; const st = AR.state;
-  if (st === 'scan') {
-    const hits = AR.hitSrc ? frame.getHitTestResults(AR.hitSrc) : [];
-    if (hits.length) {
-      const hp = hits[0].getPose(AR.ref);
-      if (hp) { const q = hp.transform.matrix; const p = [q[12], q[13], q[14]], n = v3.norm([q[4], q[5], q[6]]); AR.ret = { p, n }; AR.retOK = n[1] > 0.8 && org[1] - p[1] > 0.25; }
-    }
-    AR.setMsg(AR.ret ? (AR.retOK ? 'Floor found. Tap “Set floor here”.' : 'That is not the floor. Point lower, at the floor.') : 'Point the phone at the floor and move it slowly from side to side.');
-    return;
-  }
-  if (AR.floorY == null) return;
-  if (st === 'wallH' || st === 'cutA' || st === 'cutB') {
-    const pl = st === 'wallH' ? AR.wall : AR.surfaces.find(s => s.id === AR.sel);
-    const p0 = st === 'wallH' ? pl.b0 : pl.ar.O, n = st === 'wallH' ? pl.n : pl.ar.n;
-    const q = rayPlane(org, fwd, p0, n); if (q) { AR.ret = { p: q, n }; AR.retOK = true; }
-    return;
-  }
-  if (st === 'floor' || st === 'wallA' || st === 'wallB') {
-    let q = rayPlane(org, fwd, [0, AR.floorY, 0], [0, 1, 0]); if (!q) return;
-    if (st === 'floor') {
-      const p = AR.pts;
-      if (p.length >= 3 && dist2D(q, p[0]) < 0.12) q = p[0].slice();
-      else if (AR.square && p.length >= 2) q = AR.snapSquare(q);
-    }
-    AR.ret = { p: q, n: [0, 1, 0] }; AR.retOK = true;
-  }
+/* Finds the floor by itself: a level surface well below the phone, seen steadily for a few frames */
+AR.scanFloor = function (frame, org) {
+  const st = AR.state; const watch = st === 'scan' || (st === 'idle' && !AR.surfaces.length);
+  AR.ret = null; AR.retOK = false; if (!watch || !AR.hitSrc) return;
+  const hits = frame.getHitTestResults(AR.hitSrc); if (!hits.length) { if (st === 'scan') AR.setMsg('Point the phone at the floor and move it slowly from side to side.'); return; }
+  const hp = hits[0].getPose(AR.ref); if (!hp) return;
+  const q = hp.transform.matrix; const p = [q[12], q[13], q[14]], n = v3.norm([q[4], q[5], q[6]]);
+  const ok = n[1] > 0.8 && org[1] - p[1] > 0.35;
+  if (st === 'scan') { AR.ret = { p, n }; AR.retOK = ok; AR.setMsg(ok ? 'Finding the floor… keep moving slowly.' : 'Point lower, at the floor.'); }
+  if (!ok) return;
+  const ys = AR.scanYs; ys.push(p[1]); if (ys.length > 14) ys.shift();
+  if (ys.length < 10) return;
+  const so = [...ys].sort((a, b) => a - b); const med = so[so.length >> 1];
+  if (so[so.length - 2] - so[1] > 0.04) return;
+  if (st === 'scan') AR.lockFloor(med);
+  else if (med < AR.floorY - 0.2) { AR.floorY = med; AR.scanYs = []; AR.toast('Floor updated'); }
 };
+AR.lockFloor = function (y) { AR.floorY = y; AR.scanYs = []; AR.state = 'idle'; AR.buzz(); AR.toast('Floor found'); AR.renderUI(); };
 AR.snapSquare = function (q) {
   const p = AR.pts, a = p[p.length - 1]; const e1 = v3.norm(v3.flat(v3.sub(p[1], p[0]))), e2 = [-e1[2], 0, e1[0]];
   const d = v3.flat(v3.sub(q, a)); const L = Math.hypot(d[0], d[2]); if (L < 0.05) return q;
@@ -3002,94 +3263,202 @@ AR.labels = function (P, V) {
   const box = $('#arLabels'); if (!box) return; const PV = m4mul(P, V); const U = Settings.units; const out = [];
   const put = (p, text) => { const c = m4v(PV, [p[0], p[1], p[2], 1]); if (c[3] <= 0.05) return; const x = (c[0] / c[3] * 0.5 + 0.5) * innerWidth, y = (0.5 - c[1] / c[3] * 0.5) * innerHeight; if (x < -50 || y < -50 || x > innerWidth + 50 || y > innerHeight + 50) return; out.push([x, y, text]); };
   const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
-  const st = AR.state, p = AR.pts;
+  const L = mm => fmtLen(mm, U);
+  const st = AR.state, p = AR.pts, c = AR.cand ? AR.cand.p : null;
   if (st === 'floor') {
-    for (let i = 1; i < p.length; i++) put(mid(p[i - 1], p[i]), fmtLen(dist2D(p[i - 1], p[i]) * 1000, U));
-    if (p.length && AR.ret) put(mid(p[p.length - 1], AR.ret.p), fmtLen(dist2D(p[p.length - 1], AR.ret.p) * 1000, U));
-  } else if (st === 'wallB' && p.length && AR.ret) put(mid(p[0], AR.ret.p), fmtLen(dist2D(p[0], AR.ret.p) * 1000, U));
-  else if (st === 'wallH' && AR.ret) {
-    const w = AR.wall; put(mid(w.b0, w.b1), fmtLen(dist2D(w.b0, w.b1) * 1000, U));
-    const h = Math.max(0, AR.ret.p[1] - AR.floorY); put([w.b0[0], AR.floorY + h / 2, w.b0[2]], 'H ' + fmtLen(h * 1000, U));
-  } else if (st === 'cutB' && AR.cutA && AR.ret) {
-    const a = AR.cutA, b = AR.ret.p; put(mid(a, b), `${fmtLen(Math.hypot(b[0] - a[0], b[2] - a[2]) * 1000, U)} × ${fmtLen(Math.abs(b[1] - a[1]) * 1000, U)}`);
-  } else if (st === 'done') {
+    for (let i = 1; i < p.length; i++) put(mid(p[i - 1], p[i]), L(dist2D(p[i - 1], p[i]) * 1000));
+    if (c && p.length) {
+      if (AR.floorShape === 'rect' && p.length === 2) { const r = AR.rectFrom(p[0], p[1], c); if (r) put(mid(r[1], r[2]), L(dist2D(r[1], r[2]) * 1000)); }
+      else put(mid(p[p.length - 1], c), L(dist2D(p[p.length - 1], c) * 1000));
+    }
+  } else if (st === 'wallB' && p.length && c) put(mid(p[0], c), L(dist2D(p[0], c) * 1000));
+  else if (st === 'cutB' && AR.cutA && c) { const a = AR.cutA; put(mid(a, c), `${L(Math.hypot(c[0] - a[0], c[2] - a[2]) * 1000)} × ${L(Math.abs(c[1] - a[1]) * 1000)}`); }
+  else if (st === 'done') {
     const sf = AR.surfaces.find(s => s.id === AR.sel);
-    if (sf) { const c = sf.poly ? sf.poly.reduce((acc, q) => [acc[0] + q.x / sf.poly.length, acc[1] + q.y / sf.poly.length], [0, 0]) : [sf.W / 2, sf.H / 2]; put(arPoint(sf, c[0], c[1]), `${sf.name} · ${fmtLen(sf.W, U)} × ${fmtLen(sf.H, U)}`); }
+    if (sf && sf.g && sf.g.kind === 'wall') {
+      const g = sf.g; put(v3.add(mid(g.b0, g.b1), [0, 0.12, 0]), L(sf.W)); put(v3.add(mid(g.b0, g.b1), [0, g.h + 0.12, 0]), 'Height ' + L(sf.H));
+    } else if (sf) {
+      const q = sf.g.pts3; for (let i = 0; i < q.length; i++) put(mid(q[i], q[(i + 1) % q.length]), L(dist2D(q[i], q[(i + 1) % q.length]) * 1000));
+    }
   }
+  // finger-size handles for the selected surface (drawn on screen so they stay easy to grab at any distance)
+  const hb = $('#arHandles'); const hs = [];
+  if (st === 'done') { const sf = AR.surfaces.find(s => s.id === AR.sel); if (sf) AR.handles(sf).forEach((h, i) => { const sp = AR.toScreen(h.p); if (sp) hs.push([sp[0], sp[1], AR.drag && AR.drag.i === i]); }); }
+  while (hb.children.length < hs.length) { const d = document.createElement('div'); d.className = 'ar-h'; hb.appendChild(d); }
+  [...hb.children].forEach((d, i) => { if (i < hs.length) { d.hidden = false; d.classList.toggle('on', !!hs[i][2]); d.style.transform = `translate(${hs[i][0]}px,${hs[i][1]}px) translate(-50%,-50%)`; } else d.hidden = true; });
   while (box.children.length < out.length) { const d = document.createElement('div'); d.className = 'ar-lbl'; box.appendChild(d); }
   [...box.children].forEach((d, i) => { if (i < out.length) { d.hidden = false; d.style.transform = `translate(${out[i][0]}px,${out[i][1]}px) translate(-50%,-50%)`; if (d.textContent !== out[i][2]) d.textContent = out[i][2]; } else d.hidden = true; });
 };
 
+/* ---------- touch on the camera view ---------- */
+function m4inv(m) {
+  const a = m, o = new Float32Array(16);
+  const b00 = a[0] * a[5] - a[1] * a[4], b01 = a[0] * a[6] - a[2] * a[4], b02 = a[0] * a[7] - a[3] * a[4], b03 = a[1] * a[6] - a[2] * a[5];
+  const b04 = a[1] * a[7] - a[3] * a[5], b05 = a[2] * a[7] - a[3] * a[6], b06 = a[8] * a[13] - a[9] * a[12], b07 = a[8] * a[14] - a[10] * a[12];
+  const b08 = a[8] * a[15] - a[11] * a[12], b09 = a[9] * a[14] - a[10] * a[13], b10 = a[9] * a[15] - a[11] * a[13], b11 = a[10] * a[15] - a[11] * a[14];
+  let det = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06; if (!det) return null; det = 1 / det;
+  o[0] = (a[5] * b11 - a[6] * b10 + a[7] * b09) * det; o[1] = (a[2] * b10 - a[1] * b11 - a[3] * b09) * det; o[2] = (a[13] * b05 - a[14] * b04 + a[15] * b03) * det; o[3] = (a[10] * b04 - a[9] * b05 - a[11] * b03) * det;
+  o[4] = (a[6] * b08 - a[4] * b11 - a[7] * b07) * det; o[5] = (a[0] * b11 - a[2] * b08 + a[3] * b07) * det; o[6] = (a[14] * b02 - a[12] * b05 - a[15] * b01) * det; o[7] = (a[8] * b05 - a[10] * b02 + a[11] * b01) * det;
+  o[8] = (a[4] * b10 - a[5] * b08 + a[7] * b06) * det; o[9] = (a[1] * b08 - a[0] * b10 - a[3] * b06) * det; o[10] = (a[12] * b04 - a[13] * b02 + a[15] * b00) * det; o[11] = (a[9] * b02 - a[8] * b04 - a[11] * b00) * det;
+  o[12] = (a[5] * b07 - a[4] * b09 - a[6] * b06) * det; o[13] = (a[0] * b09 - a[1] * b07 + a[2] * b06) * det; o[14] = (a[13] * b01 - a[12] * b03 - a[14] * b00) * det; o[15] = (a[8] * b03 - a[9] * b01 + a[10] * b00) * det;
+  return o;
+}
+AR.screenRay = function (x, y) {
+  if (!AR.P || !AR.V) return null; const inv = m4inv(m4mul(AR.P, AR.V)); if (!inv) return null;
+  const nx = x / innerWidth * 2 - 1, ny = 1 - y / innerHeight * 2;
+  const a = m4v(inv, [nx, ny, -1, 1]), b = m4v(inv, [nx, ny, 1, 1]);
+  const p0 = [a[0] / a[3], a[1] / a[3], a[2] / a[3]], p1 = [b[0] / b[3], b[1] / b[3], b[2] / b[3]];
+  return { o: p0, d: v3.norm(v3.sub(p1, p0)) };
+};
+AR.toScreen = function (p) { const c = m4v(m4mul(AR.P, AR.V), [p[0], p[1], p[2], 1]); if (c[3] <= 0.02) return null; return [(c[0] / c[3] * 0.5 + 0.5) * innerWidth, (0.5 - c[1] / c[3] * 0.5) * innerHeight]; };
+AR.onFloorAt = function (x, y) { const r = AR.screenRay(x, y); if (!r || AR.floorY == null) return null; const q = rayPlane(r.o, r.d, [0, AR.floorY, 0], [0, 1, 0]); return q && dist2D(q, AR.cam) < 15 ? [q[0], AR.floorY, q[2]] : null; };
+AR.onWallAt = function (sf, x, y) { const r = AR.screenRay(x, y); if (!r) return null; return rayPlane(r.o, r.d, sf.ar.O, sf.ar.n); };
+AR.updateCand = function (x, y) {
+  const st = AR.state; let p = null, n = [0, 1, 0];
+  if (st === 'floor' || st === 'wallA' || st === 'wallB') {
+    p = AR.onFloorAt(x, y);
+    if (p && st === 'floor' && AR.floorShape === 'free') { const q = AR.pts; if (q.length >= 3 && dist2D(p, q[0]) < 0.15) p = q[0].slice(); else if (AR.square && q.length >= 2) p = AR.snapSquare(p); }
+  } else if (st === 'cutA' || st === 'cutB') { const sf = AR.surfaces.find(s => s.id === AR.sel); if (sf) { p = AR.onWallAt(sf, x, y); n = sf.ar.n; } }
+  AR.cand = p ? { p, n } : null;
+};
+const PIN = 72;
+AR.onDown = function (e) {
+  if (!AR.sess || e.target.closest('[data-ui]')) return;
+  const x = e.clientX, y = e.clientY, st = AR.state;
+  if (st === 'done') {
+    const sf = AR.surfaces.find(s => s.id === AR.sel);
+    if (sf) {
+      let best = -1, bd = 46 * 46, off = null;
+      AR.handles(sf).forEach((h, i) => { const sp = AR.toScreen(h.p); if (!sp) return; const d = (sp[0] - x) ** 2 + (sp[1] - y) ** 2; if (d < bd) { bd = d; best = i; off = [sp[0] - x, sp[1] - y]; } });
+      if (best >= 0) { AR.pushHist(sf); AR.drag = { sf, i: best, off }; sf._dragging = true; AR.tip = null; try { e.target.setPointerCapture(e.pointerId); } catch (_) { } return; }
+    }
+    AR.touch = { x, y, t0: performance.now(), moved: false, mode: 'select' }; return;
+  }
+  if (!['floor', 'wallA', 'wallB', 'cutA', 'cutB'].includes(st)) return;
+  AR.touch = { x, y, t0: performance.now(), moved: false, pin: [x, y] }; AR.updateCand(x, y);
+  try { e.target.setPointerCapture(e.pointerId); } catch (_) { }
+};
+AR.onMove = function (e) {
+  const x = e.clientX, y = e.clientY;
+  if (AR.drag) {
+    const d = AR.drag, sf = d.sf, h = AR.handles(sf)[d.i]; const px = x + d.off[0], py = y + d.off[1];
+    if (sf.g.kind === 'floor') { const q = AR.onFloorAt(px, py); if (q) { const pts = sf.g.pts3.slice(); pts[d.i] = q; AR.buildFloor(sf, pts); } }
+    else if (h.k === 'top') { const q = AR.onWallAt(sf, px, py); if (q) AR.buildWall(sf, sf.g.b0, sf.g.b1, clamp(q[1] - AR.floorY, 0.3, 6)); }
+    else { const q = AR.onFloorAt(px, py); if (q) { const b0 = h.k === 'b0' ? q : sf.g.b0, b1 = h.k === 'b1' ? q : sf.g.b1; if (dist2D(b0, b1) > 0.25) AR.buildWall(sf, b0, b1, sf.g.h); } }
+    return;
+  }
+  const t = AR.touch; if (!t) return;
+  if (!t.moved && (x - t.x) ** 2 + (y - t.y) ** 2 > 100) t.moved = true;
+  if (t.mode === 'select') return;
+  t.pin = t.moved ? [x, y - PIN] : [x, y]; AR.updateCand(t.pin[0], t.pin[1]);
+  const pin = $('#arPin'); if (t.moved) { pin.hidden = false; pin.style.transform = `translate(${x}px,${y - PIN}px)`; }
+};
+AR.onUp = function (e) {
+  const pin = $('#arPin'); pin.hidden = true;
+  if (AR.drag) { const sf = AR.drag.sf; sf._dragging = false; sf._v++; AR.drag = null; AR.saved = false; AR.renderUI(); return; }
+  const t = AR.touch; AR.touch = null; if (!t) return;
+  if (t.mode === 'select') { if (!t.moved) AR.selectAt(e.clientX, e.clientY); return; }
+  const c = AR.cand; AR.cand = null;
+  if (c) AR.place(c.p); else AR.toast(AR.state.startsWith('cut') ? 'Tap on the wall' : 'Tap on the floor');
+};
+AR.selectAt = function (x, y) {
+  const r = AR.screenRay(x, y); if (!r) return; let best = null, bt = Infinity;
+  for (const sf of AR.surfaces) {
+    const q = rayPlane(r.o, r.d, sf.ar.O, sf.ar.n); if (!q) continue;
+    const X = v3.dot(v3.sub(q, sf.ar.O), sf.ar.ex) * 1000, Y = v3.dot(v3.sub(q, sf.ar.O), sf.ar.ey) * 1000;
+    const inside = sf.poly ? pointInPoly({ x: X, y: Y }, sf.poly) : X >= 0 && X <= sf.W && Y >= 0 && Y <= sf.H;
+    const t = v3.len(v3.sub(q, r.o)); if (inside && t < bt) { bt = t; best = sf; }
+  }
+  if (best && best.id !== AR.sel) { AR.sel = best.id; AR.pickSlot = 0; AR.renderUI(); }
+};
+
 /* ---------- measuring steps ---------- */
 AR.buzz = () => { try { navigator.vibrate && navigator.vibrate(12); } catch (e) { } };
-AR.action = function () {
-  const st = AR.state, r = AR.ret;
-  if (st === 'idle' || st === 'done' || st === 'off' || st === 'starting') return;
-  if (!r || !AR.retOK) { AR.toast(st === 'scan' ? 'Point at the floor first' : 'Aim the dot at the surface'); return; }
-  AR.buzz();
-  if (st === 'scan') { AR.floorY = r.p[1]; AR.state = 'idle'; }
-  else if (st === 'floor') {
-    const p = AR.pts;
-    if (p.length >= 3 && dist2D(r.p, p[0]) < 0.12) return AR.finishFloor();
-    if (p.length && dist2D(r.p, p[p.length - 1]) < 0.05) { AR.toast('Move to the next corner'); return; }
-    p.push([r.p[0], AR.floorY, r.p[2]]);
-  } else if (st === 'wallA') { AR.pts = [[r.p[0], AR.floorY, r.p[2]]]; AR.state = 'wallB'; }
+AR.action = function () { if (AR.state === 'scan' && AR.retOK && AR.ret) AR.lockFloor(AR.ret.p[1]); };
+AR.rectFrom = function (A, B, C) {
+  const e1 = v3.norm(v3.flat(v3.sub(B, A))); const n = [-e1[2], 0, e1[0]]; const d = v3.dot(v3.flat(v3.sub(C, A)), n);
+  if (Math.abs(d) < 0.05) return null; const o = v3.mul(n, d); return [A, B, v3.add(B, o), v3.add(A, o)];
+};
+AR.place = function (p) {
+  const st = AR.state; AR.buzz();
+  if (st === 'floor') {
+    const q = AR.pts;
+    if (AR.floorShape === 'rect') {
+      if (q.length === 1 && dist2D(p, q[0]) < 0.3) { AR.toast('Tap the next corner along the same wall'); return; }
+      if (q.length < 2) q.push(p);
+      else { const r = AR.rectFrom(q[0], q[1], p); if (!r || dist2D(r[1], r[2]) < 0.3) { AR.toast('Tap on the other side of the room'); return; } return AR.addFloor(r); }
+    } else {
+      if (q.length >= 3 && dist2D(p, q[0]) < 0.15) return AR.addFloor(q.slice());
+      if (q.length && dist2D(p, q[q.length - 1]) < 0.05) return;
+      q.push(p);
+    }
+  } else if (st === 'wallA') { AR.pts = [p]; AR.state = 'wallB'; }
   else if (st === 'wallB') {
-    const b0 = AR.pts[0], b1 = [r.p[0], AR.floorY, r.p[2]];
-    if (dist2D(b0, b1) < 0.3) { AR.toast('The wall must be wider than 1 ft'); return; }
-    const e1 = v3.norm(v3.flat(v3.sub(b1, b0))); let n = [e1[2], 0, -e1[0]]; if (v3.dot(n, v3.sub(AR.cam, b0)) < 0) n = v3.mul(n, -1);
-    AR.wall = { b0, b1, e1, n }; AR.state = 'wallH';
-  } else if (st === 'wallH') {
-    const h = r.p[1] - AR.floorY; if (h < 0.3) { AR.toast('Raise the dot to the top of the wall'); return; }
-    return AR.finishWall(h);
-  } else if (st === 'cutA') { AR.cutA = r.p; AR.state = 'cutB'; }
-  else if (st === 'cutB') return AR.finishCut(r.p);
+    if (dist2D(AR.pts[0], p) < 0.3) { AR.toast('Tap the other bottom corner of the wall'); return; }
+    return AR.addWall(AR.pts[0], p);
+  } else if (st === 'cutA') { AR.cutA = p; AR.state = 'cutB'; }
+  else if (st === 'cutB') return AR.finishCut(p);
   AR.renderUI();
 };
 AR.newSurfaceBase = function (type) {
   const n = AR.surfaces.filter(s => s.type === type).length + 1;
-  const sf = { id: uid('s'), type, name: (type === 'floor' ? 'Floor ' : 'Wall ') + n, cuts: [], cutsMM: [], dimsSet: true, live: true, light: 0.5, shine: 1,
+  return { id: uid('s'), type, name: (type === 'floor' ? 'Floor ' : 'Wall ') + n, cuts: [], cutsMM: [], dimsSet: true, live: true, light: 0.5, shine: 1,
     layout: newLayout(Ed.defaultTile(type), type), pts: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }], _v: 1 };
-  return sf;
 };
-AR.finishFloor = function () {
-  const p = AR.pts; if (p.length < 3) return;
+AR.buildFloor = function (sf, pts3) {
+  const p = pts3.map(q => [q[0], AR.floorY, q[2]]); sf.g = { kind: 'floor', pts3: p };
   const e1 = v3.norm(v3.flat(v3.sub(p[1], p[0]))); let e2 = [-e1[2], 0, e1[0]];
   let st = p.map(q => [v3.dot(v3.sub(q, p[0]), e1), v3.dot(v3.sub(q, p[0]), e2)]);
   if (st.reduce((a, q) => a + q[1], 0) < 0) { e2 = v3.mul(e2, -1); st = st.map(q => [q[0], -q[1]]); }
   const minS = Math.min(...st.map(q => q[0])), maxS = Math.max(...st.map(q => q[0])), minT = Math.min(...st.map(q => q[1])), maxT = Math.max(...st.map(q => q[1]));
-  const sf = AR.newSurfaceBase('floor');
   sf.W = Math.max(100, Math.round((maxS - minS) * 1000)); sf.H = Math.max(100, Math.round((maxT - minT) * 1000));
   sf.poly = st.map(q => ({ x: Math.round((q[0] - minS) * 1000), y: Math.round((q[1] - minT) * 1000) }));
   const O = v3.add(p[0], v3.add(v3.mul(e1, minS), v3.mul(e2, minT))); O[1] = AR.floorY + 0.004;
-  sf.ar = { O, ex: e1, ey: e2, n: [0, 1, 0] };
-  AR.surfaces.push(sf); AR.sel = sf.id; AR.pts = []; AR.state = 'done'; AR.pickSlot = 0; AR.renderUI();
+  sf.ar = { O, ex: e1, ey: e2, n: [0, 1, 0] }; sf._v = (sf._v || 0) + 1;
 };
-AR.finishWall = function (h) {
-  const w = AR.wall; const sf = AR.newSurfaceBase('wall');
-  sf.W = Math.round(dist2D(w.b0, w.b1) * 1000); sf.H = Math.round(h * 1000);
-  const O = v3.add(w.b0, v3.mul(w.n, 0.004)); O[1] = AR.floorY;
-  sf.ar = { O, ex: w.e1, ey: [0, 1, 0], n: w.n };
-  AR.surfaces.push(sf); AR.sel = sf.id; AR.pts = []; AR.wall = null; AR.state = 'done'; AR.pickSlot = 0; AR.renderUI();
+AR.buildWall = function (sf, b0, b1, h) {
+  b0 = [b0[0], AR.floorY, b0[2]]; b1 = [b1[0], AR.floorY, b1[2]];
+  const e1 = v3.norm(v3.flat(v3.sub(b1, b0))); let n = [e1[2], 0, -e1[0]];
+  const ref = sf.ar ? sf.ar.n : v3.sub(AR.cam, b0); if (v3.dot(n, ref) < 0) n = v3.mul(n, -1);
+  sf.g = { kind: 'wall', b0, b1, h }; sf.W = Math.round(dist2D(b0, b1) * 1000); sf.H = Math.round(h * 1000);
+  const O = v3.add(b0, v3.mul(n, 0.004)); O[1] = AR.floorY;
+  sf.ar = { O, ex: e1, ey: [0, 1, 0], n }; sf._v = (sf._v || 0) + 1;
+};
+AR.handles = function (sf) {
+  const g = sf.g; if (!g) return [];
+  if (g.kind === 'floor') return g.pts3.map((p, i) => ({ p, n: [0, 1, 0], k: 'f' + i }));
+  const top = [(g.b0[0] + g.b1[0]) / 2, AR.floorY + g.h, (g.b0[2] + g.b1[2]) / 2];
+  return [{ p: g.b0, n: [0, 1, 0], k: 'b0' }, { p: g.b1, n: [0, 1, 0], k: 'b1' }, { p: top, n: sf.ar.n, k: 'top' }];
+};
+AR.pushHist = function (sf) { AR.hist.push({ id: sf.id, g: JSON.parse(JSON.stringify(sf.g)) }); if (AR.hist.length > 30) AR.hist.shift(); };
+AR.addFloor = function (pts3) {
+  const sf = AR.newSurfaceBase('floor'); AR.buildFloor(sf, pts3);
+  AR.surfaces.push(sf); AR.sel = sf.id; AR.pts = []; AR.state = 'done'; AR.pickSlot = 0; AR.tip = 'drag'; AR.renderUI();
+};
+AR.addWall = function (b0, b1) {
+  const sf = AR.newSurfaceBase('wall'); AR.buildWall(sf, b0, b1, AR.lastWallH || 3.048);
+  AR.surfaces.push(sf); AR.sel = sf.id; AR.pts = []; AR.state = 'done'; AR.pickSlot = 0; AR.tip = 'height'; AR.renderUI();
 };
 AR.finishCut = function (b) {
   const sf = AR.surfaces.find(s => s.id === AR.sel); const a = AR.cutA; if (!sf) return;
   const toMM = q => ({ x: clamp(v3.dot(v3.sub(q, sf.ar.O), sf.ar.ex) * 1000, 0, sf.W), y: clamp((q[1] - AR.floorY) * 1000, 0, sf.H) });
   const A = toMM(a), B = toMM(b); const x0 = Math.min(A.x, B.x), x1 = Math.max(A.x, B.x), y0 = Math.min(A.y, B.y), y1 = Math.max(A.y, B.y);
-  if (x1 - x0 < 100 || y1 - y0 < 100) { AR.toast('That opening is too small. Try again.'); AR.state = 'cutA'; AR.renderUI(); return; }
+  if (x1 - x0 < 100 || y1 - y0 < 100) { AR.toast('That opening is too small. Try again.'); AR.state = 'cutA'; AR.cutA = null; AR.renderUI(); return; }
   sf.cutsMM.push({ count: true, poly: [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }].map(q => ({ x: Math.round(q.x), y: Math.round(q.y) })) });
-  sf._v++; AR.cutA = null; AR.state = 'done'; AR.renderUI();
+  sf._v++; AR.cutA = null; AR.state = 'done'; AR.saved = false; AR.renderUI();
 };
 AR.undo = function () {
   const st = AR.state;
   if (st === 'floor' && AR.pts.length) AR.pts.pop();
   else if (st === 'floor' || st === 'wallA') AR.state = AR.surfaces.length ? 'done' : 'idle';
   else if (st === 'wallB') { AR.state = 'wallA'; AR.pts = []; }
-  else if (st === 'wallH') { AR.state = 'wallB'; AR.pts = [AR.wall.b0]; AR.wall = null; }
   else if (st === 'cutB') { AR.state = 'cutA'; AR.cutA = null; }
   else if (st === 'cutA') AR.state = 'done';
-  else if (st === 'done') { const sf = AR.surfaces.find(s => s.id === AR.sel); if (sf && sf.cutsMM.length) { sf.cutsMM.pop(); sf._v++; } else if (sf) AR.removeSel(); }
-  else if (st === 'idle') { AR.floorY = null; AR.state = 'scan'; }
+  else if (st === 'done') {
+    const sf = AR.surfaces.find(s => s.id === AR.sel); const hi = AR.hist.length ? AR.hist[AR.hist.length - 1] : null;
+    if (hi && sf && hi.id === sf.id) { AR.hist.pop(); if (hi.g.kind === 'floor') AR.buildFloor(sf, hi.g.pts3); else AR.buildWall(sf, hi.g.b0, hi.g.b1, hi.g.h); }
+    else if (sf && sf.cutsMM.length) { sf.cutsMM.pop(); sf._v++; } else if (sf) AR.removeSel();
+  } else if (st === 'idle') { AR.floorY = null; AR.scanYs = []; AR.state = 'scan'; }
   AR.renderUI();
 };
 AR.removeSel = function () {
@@ -3179,43 +3548,47 @@ function arTileStrip(sf) {
 }
 AR.renderUI = function () {
   const b = $('#arBottom'); if (!b) return; const st = AR.state, U = Settings.units;
-  $('#arUndo').hidden = !(st !== 'starting' && st !== 'off' && (st !== 'scan'));
+  $('#arUndo').hidden = st === 'starting' || st === 'off' || st === 'scan';
+  const cross = $('.ar-cross'); if (cross) cross.hidden = st !== 'scan';
   let h = '';
   const btn = (act, label, cls = '', extra = '') => `<button class="ar-btn ${cls}" data-ar="${act}" ${extra}>${label}</button>`;
+  const tip = '<p class="ar-note">Tip: hold your finger down and slide. A pin appears above your finger so you can see the corner.</p>';
   switch (st) {
     case 'starting': AR.setMsg('Starting the camera…'); break;
-    case 'scan': h = `<div class="ar-row">${btn('main', 'Set floor here', 'pri big', 'id="arMain" disabled')}</div>`; break;
-    case 'idle': AR.setMsg('Floor is set. What should we tile?'); h = `<div class="ar-row">${btn('newFloor', 'Tile the floor', 'pri big')}${btn('newWall', 'Tile a wall', 'pri big')}</div>`; break;
+    case 'scan': h = `<p class="ar-note">The floor is found by itself. If it takes long, point at the floor and tap below.</p><div class="ar-row">${btn('main', 'Use this as the floor', 'big', 'id="arMain" disabled')}</div>`; break;
+    case 'idle': AR.setMsg('Floor found. What should we tile?'); h = `<div class="ar-row">${btn('newFloor', 'Tile the floor', 'pri big')}${btn('newWall', 'Tile a wall', 'pri big')}</div>`; break;
     case 'floor': {
-      const n = AR.pts.length;
-      AR.setMsg(n === 0 ? 'Aim the dot at one corner of the floor, where it meets the wall.' : n < 3 ? 'Go round the room. Aim at the next corner.' : 'Next corner, or aim at the first dot to close the shape.');
-      h = `<div class="ar-row"><button class="ar-chip" data-ar="square" aria-pressed="${AR.square}">Square corners</button><span class="ar-note">${n} corner${n === 1 ? '' : 's'}</span></div>
-        <div class="ar-row">${btn('main', 'Add corner', 'pri big', 'id="arMain"')}${btn('finishFloor', 'Finish', '', n < 3 ? 'disabled' : '')}${btn('cancel', 'Cancel', 'ghost')}</div>`; break;
+      const n = AR.pts.length, rect = AR.floorShape === 'rect';
+      AR.setMsg(rect ? ['Tap a corner of the floor on the screen, where the floor meets a wall.', 'Tap the next corner along the same wall.', 'Now tap anywhere on the opposite side of the room. Turn around if you need to.'][Math.min(n, 2)]
+        : n === 0 ? 'Tap each corner of the floor on the screen.' : n < 3 ? 'Tap the next corner. Turn the phone to see more of the room.' : 'Tap the next corner, or tap the first dot to finish.');
+      h = `<div class="ar-row"><div class="ar-seg"><button data-ar="shape" data-v="rect" aria-pressed="${rect}">Rectangle room</button><button data-ar="shape" data-v="free" aria-pressed="${!rect}">Any shape</button></div>
+        ${rect ? '' : `<button class="ar-chip" data-ar="square" aria-pressed="${AR.square}">Square corners</button>`}</div>${tip}
+        <div class="ar-row">${rect ? '' : btn('finishFloor', 'Finish', 'pri big', n < 3 ? 'disabled' : '')}${btn('cancel', 'Cancel', rect ? 'big' : 'ghost')}</div>`; break;
     }
-    case 'wallA': AR.setMsg('Aim at the bottom LEFT corner of the wall, on the floor.'); h = `<div class="ar-row">${btn('main', 'Add point', 'pri big', 'id="arMain"')}${btn('cancel', 'Cancel', 'ghost')}</div>`; break;
-    case 'wallB': AR.setMsg('Now aim at the bottom RIGHT corner of the wall.'); h = `<div class="ar-row">${btn('main', 'Add point', 'pri big', 'id="arMain"')}${btn('cancel', 'Cancel', 'ghost')}</div>`; break;
-    case 'wallH': AR.setMsg('Raise the dot to the top edge of the wall (ceiling line).'); h = `<div class="ar-row">${btn('main', 'Set height', 'pri big', 'id="arMain"')}${btn('cancel', 'Cancel', 'ghost')}</div>`; break;
-    case 'cutA': AR.setMsg('Aim at one corner of the door or window.'); h = `<div class="ar-row">${btn('main', 'Add point', 'pri big', 'id="arMain"')}${btn('cancelCut', 'Cancel', 'ghost')}</div>`; break;
-    case 'cutB': AR.setMsg('Now aim at the opposite corner.'); h = `<div class="ar-row">${btn('main', 'Add point', 'pri big', 'id="arMain"')}${btn('cancelCut', 'Cancel', 'ghost')}</div>`; break;
+    case 'wallA': AR.setMsg('Tap the bottom LEFT corner of the wall on the screen, where it meets the floor.'); h = `${tip}<div class="ar-row">${btn('cancel', 'Cancel', 'big')}</div>`; break;
+    case 'wallB': AR.setMsg('Now tap the bottom RIGHT corner of the wall.'); h = `${tip}<div class="ar-row">${btn('cancel', 'Cancel', 'big')}</div>`; break;
+    case 'cutA': AR.setMsg('Tap one corner of the door or window.'); h = `<div class="ar-row">${btn('cancelCut', 'Cancel', 'big')}</div>`; break;
+    case 'cutB': AR.setMsg('Now tap the opposite corner.'); h = `<div class="ar-row">${btn('cancelCut', 'Cancel', 'big')}</div>`; break;
     case 'done': {
       const sf = AR.surfaces.find(s => s.id === AR.sel) || AR.surfaces[0]; if (!sf) { AR.state = 'idle'; return AR.renderUI(); }
-      AR.sel = sf.id; const L = sf.layout; const lay = computeLayout(sf); const M = L.mix.mode;
+      AR.sel = sf.id; const L = sf.layout; const lay = computeLayout(sf); const M = L.mix.mode; const wall = sf.type === 'wall';
       let cnt = 'Pick a tile';
       if (lay) { const cut = Object.values(lay.per).reduce((a, p) => a + p.cut, 0); const A = tileDef(L.slots[0]); const bx = A && A.perBox && !L.slots[1] ? ` · ${Math.ceil(Math.ceil(lay.total * (1 + Settings.extra / 100)) / A.perBox)} boxes` : ''; cnt = `${lay.total} pcs (${cut} cut)${bx} · ${fmtArea(lay.tiledArea, U)}`; }
-      AR.setMsg(`${sf.name} · ${fmtLen(sf.W, U)} × ${fmtLen(sf.H, U)} · measured live`);
+      AR.setMsg(AR.tip === 'height' ? 'Drag the top dot up to the ceiling line, or pick the height below.' : AR.tip === 'drag' ? 'Drag the white dots to fit the corners exactly. Then pick tiles below.' : `${sf.name} · ${fmtLen(sf.W, U)} × ${fmtLen(sf.H, U)} · measured live`);
       const mixName = { single: 'One design', rows: 'Band', checker: 'Chequer', random: 'Random', cols: 'Columns' }[M] || 'One design';
+      const hft = sf.H / 304.8; const more = AR.more;
       h = `<div class="ar-row ar-scroll">${AR.surfaces.map(s => `<button class="ar-chip" data-ar="sel" data-id="${s.id}" aria-pressed="${s.id === sf.id}">${esc(s.name)}</button>`).join('')}
           <button class="ar-chip" data-ar="newFloor">+ Floor</button><button class="ar-chip" data-ar="newWall">+ Wall</button></div>
-        <div class="ar-row ar-scroll"><div class="ar-seg"><button data-ar="slot" data-v="0" aria-pressed="${AR.pickSlot === 0}">Main tile</button><button data-ar="slot" data-v="1" aria-pressed="${AR.pickSlot === 1}">Second tile</button></div>
+        ${wall ? `<div class="ar-row ar-scroll"><span class="ar-note" style="flex:none">Height</span>${[8, 9, 10, 11, 12].map(f => `<button class="ar-chip" data-ar="height" data-v="${f}" aria-pressed="${Math.abs(hft - f) < 0.04}">${f} ft</button>`).join('')}<button class="ar-chip" data-ar="cut">+ Door / window</button></div>` : ''}
+        ${more ? `<div class="ar-row ar-scroll"><div class="ar-seg"><button data-ar="slot" data-v="0" aria-pressed="${AR.pickSlot === 0}">Main tile</button><button data-ar="slot" data-v="1" aria-pressed="${AR.pickSlot === 1}">Second tile</button></div>
           <button class="ar-chip" data-ar="mix">Mix: ${mixName}</button>
           <button class="ar-chip" data-ar="rotate" aria-pressed="${!!L.rotate}">Turn tiles</button>
           <button class="ar-chip" data-ar="brick" aria-pressed="${L.pattern === 'brick'}">Brick</button>
-          ${sf.type === 'wall' ? '<button class="ar-chip" data-ar="cut">+ Door / window</button>' : ''}
           ${AR.depthOK ? `<button class="ar-chip" data-ar="occl" aria-pressed="${AR.occl}">Hide behind furniture</button>` : ''}
           <button class="ar-chip" data-ar="light">Light ${Math.round(AR.bright * 100)}%</button>
-          <button class="ar-chip" data-ar="remove">Remove ${esc(sf.name)}</button></div>
+          <button class="ar-chip" data-ar="remove">Remove ${esc(sf.name)}</button></div>` : ''}
         ${arTileStrip(sf)}
-        <div class="ar-row"><span class="ar-count">${esc(cnt)}</span></div>
+        <div class="ar-row"><span class="ar-count">${esc(cnt)}</span><button class="ar-chip" data-ar="more" aria-pressed="${more}">${more ? 'Fewer options' : 'More options'}</button></div>
         <div class="ar-row">${btn('capture', ICON.camera + ' Capture', 'pri big')}${btn('editor', 'Editor')}</div>`;
       break;
     }
@@ -3229,16 +3602,18 @@ AR.onUI = function (e) {
     case 'main': AR.action(); return;
     case 'exit': if (AR.surfaces.length && !AR.saved) AR.exit('editor'); else AR.exit(); return;
     case 'undo': AR.undo(); return;
-    case 'newFloor': AR.pts = []; AR.state = 'floor'; break;
-    case 'newWall': AR.pts = []; AR.state = 'wallA'; break;
-    case 'finishFloor': AR.finishFloor(); return;
-    case 'cancel': AR.pts = []; AR.wall = null; AR.state = AR.surfaces.length ? 'done' : 'idle'; break;
-    case 'cancelCut': AR.cutA = null; AR.state = 'done'; break;
+    case 'newFloor': AR.pts = []; AR.cand = null; AR.state = 'floor'; break;
+    case 'newWall': AR.pts = []; AR.cand = null; AR.state = 'wallA'; break;
+    case 'shape': AR.floorShape = el.dataset.v; AR.pts = []; break;
+    case 'finishFloor': if (AR.pts.length >= 3) AR.addFloor(AR.pts.slice()); return;
+    case 'cancel': AR.pts = []; AR.cand = null; AR.state = AR.surfaces.length ? 'done' : 'idle'; break;
+    case 'cancelCut': AR.cutA = null; AR.cand = null; AR.state = 'done'; break;
     case 'square': AR.square = !AR.square; break;
-    case 'sel': AR.sel = el.dataset.id; AR.pickSlot = 0; break;
-    case 'slot': AR.pickSlot = +el.dataset.v; if (AR.pickSlot === 1 && sf && sf.layout.mix.mode === 'single') AR.toast('Pick the second tile from the list'); break;
+    case 'sel': AR.sel = el.dataset.id; AR.pickSlot = 0; AR.tip = null; break;
+    case 'height': { const hm = +el.dataset.v * 0.3048; AR.pushHist(sf); AR.buildWall(sf, sf.g.b0, sf.g.b1, hm); AR.lastWallH = hm; AR.tip = null; AR.saved = false; break; }
+    case 'slot': AR.pickSlot = +el.dataset.v; if (AR.pickSlot === 1 && sf && sf.layout.mix.mode === 'single') AR.toast('Pick the second tile from the list below'); break;
     case 'tile': {
-      const id = el.dataset.id, def = tileDef(id), L = sf.layout; if (!def) return;
+      const id = el.dataset.id, def = tileDef(id), L = sf.layout; if (!def) return; AR.tip = null;
       if (AR.pickSlot === 0) { const old = tileDef(L.slots[0]); if (old && !sameSize(old, def)) { L.slots = [id, null, null, null]; L.paint = {}; } else L.slots[0] = id; }
       else { L.slots[1] = id; if (L.mix.mode === 'single') { L.mix.mode = 'rows'; L.mix.from = 'bottom'; L.mix.seq = [{ slot: 0, n: 3 }, { slot: 1, n: 1 }, { slot: 0, n: 1 }]; L.mix.repeat = false; } }
       sf._v++; AR.saved = false; break;
@@ -3252,8 +3627,9 @@ AR.onUI = function (e) {
     }
     case 'rotate': sf.layout.rotate = !sf.layout.rotate; sf.layout.paint = {}; sf._v++; AR.saved = false; break;
     case 'brick': sf.layout.pattern = sf.layout.pattern === 'brick' ? 'grid' : 'brick'; sf._v++; AR.saved = false; break;
-    case 'cut': AR.cutA = null; AR.state = 'cutA'; break;
+    case 'cut': AR.cutA = null; AR.state = 'cutA'; AR.tip = null; break;
     case 'occl': AR.occl = !AR.occl; break;
+    case 'more': AR.more = !AR.more; break;
     case 'light': { const lv = [1, 1.15, 1.3, 0.7, 0.85]; AR.bright = lv[(lv.findIndex(v => Math.abs(v - AR.bright) < 0.01) + 1) % lv.length]; break; }
     case 'remove': AR.removeSel(); break;
     case 'capture': AR.snapReq = true; return;
@@ -3267,8 +3643,10 @@ AR.onUI = function (e) {
 AR.bind = function () {
   const ov = $('#ar');
   ov.addEventListener('click', AR.onUI);
-  // taps on the controls must not also place a point
-  for (const el of $$('[data-ui]', ov)) el.addEventListener('beforexrselect', e => e.preventDefault());
+  // all touch input is handled by the page (taps place points); stop the AR system from also treating taps as "select"
+  ov.addEventListener('beforexrselect', e => e.preventDefault());
+  ov.addEventListener('pointerdown', AR.onDown); ov.addEventListener('pointermove', AR.onMove);
+  ov.addEventListener('pointerup', AR.onUp); ov.addEventListener('pointercancel', () => { AR.touch = null; AR.cand = null; if (AR.drag) { AR.drag.sf._dragging = false; AR.drag.sf._v++; AR.drag = null; } $('#arPin').hidden = true; });
   $('#arExit').innerHTML = '✕'; $('#arUndo').innerHTML = ICON.undo;
 };
 
@@ -3327,6 +3705,12 @@ function goHome() { Ed.setMode('view'); Ed.compare = false; $('#btnCompare').set
   });
   $('#btnSave').addEventListener('click', () => openSave());
   $('#btnFit').addEventListener('click', () => { Ed.fit(); Ed.requestDraw(); });
+  $('#btnLight').addEventListener('click', () => Ed.cycleLight());
+  $('#varBar').addEventListener('click', e => {
+    if (e.target.closest('[data-vadd]')) { Ed.addVariant(); return; }
+    const v = e.target.closest('[data-vi]'); if (!v) return; const i = +v.dataset.vi;
+    if (i === Ed.proj.vi) Ed.variantMenu(); else Ed.switchVariant(i);
+  });
   $('#btnFull').addEventListener('click', () => { Ed.full = true; if (Ed.mode !== 'view') Ed.setMode('view'); Ed.applyChrome(); });
   $('#btnShowTools').addEventListener('click', () => { Ed.full = false; Ed.applyChrome(); Panels.render(); });
   $('#projName').addEventListener('input', e => { if (Ed.proj) { Ed.proj.name = e.target.value; Ed.dirty = true; } });
